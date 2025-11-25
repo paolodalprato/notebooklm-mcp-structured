@@ -214,6 +214,44 @@ export const askQuestionTool: Tool = {
           },
         },
       },
+      enhance_prompt: {
+        type: "boolean",
+        description:
+          "Enable structured prompt enhancement for source fidelity. " +
+          "When true, the question is wrapped with instructions that force NotebookLM " +
+          "to respond ONLY from uploaded documents, cite sources, and declare when info is not found. " +
+          "Default: true (from ENV or config).",
+      },
+      prompt_mode: {
+        type: "string",
+        enum: ["strict", "balanced"],
+        description:
+          "Prompt enhancement mode. 'strict' (default): maximum source fidelity, " +
+          "no external knowledge allowed. 'balanced': allows some synthesis across documents.",
+      },
+      prompt_language: {
+        type: "string",
+        enum: ["en", "it", "auto"],
+        description:
+          "Language for prompt enhancement instructions. 'auto' (default): detect from question. " +
+          "'en': English instructions. 'it': Italian instructions.",
+      },
+      wrap_response: {
+        type: "boolean",
+        description:
+          "Enable response wrapping with containment instructions for Claude. " +
+          "When true, the NotebookLM response includes instructions telling Claude " +
+          "NOT to add external knowledge or make assumptions beyond the source documents. " +
+          "Default: true (from ENV or config).",
+      },
+      wrapper_mode: {
+        type: "string",
+        enum: ["strict", "balanced"],
+        description:
+          "Response wrapper mode. 'strict' (default): strong containment instructions, " +
+          "Claude must relay information faithfully without augmentation. " +
+          "'balanced': softer guidelines, Claude can add context if clearly distinguished.",
+      },
     },
     required: ["question"],
   },
