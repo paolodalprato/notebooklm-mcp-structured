@@ -8,6 +8,122 @@ export function buildAskQuestionDescription(library: NotebookLibrary): string {
   const active = library.getActiveNotebook();
   const bt = "`"; // Backtick helper to avoid template literal issues
 
+  // Structuring guidelines for client-side prompt enhancement
+  const structuringGuidelines = `
+
+## 🎯 PROMPT STRUCTURING GUIDELINES (CRITICAL FOR SOURCE FIDELITY)
+
+Before sending any question to NotebookLM, you MUST structure it to ensure responses come ONLY from uploaded documents.
+
+**Why Structure?** Simple questions risk mixing document content with external knowledge. Structured prompts enforce source fidelity.
+
+**How to Structure (adapt to user's language):**
+
+${bt}${bt}${bt}
+RESPONSE INSTRUCTIONS
+
+TASK: [user's original question - keep in their language]
+
+OPERATIONAL CONSTRAINTS
+- Use ONLY information explicitly present in uploaded documents
+- DO NOT add external knowledge, interpretations, or inferences
+- If information is not present, declare it explicitly (e.g., "[NOT FOUND IN DOCUMENTS]")
+
+REQUIRED OUTPUT FORMAT
+[Adapt based on question type - see below]
+
+CITATIONS
+- Every claim MUST include source (document name or section)
+- Use direct quotes where possible
+- Citation format: "quoted text" [Source: document name]
+
+HANDLING MISSING INFORMATION
+- If requested information is not in documents, state it explicitly
+- Never invent, infer, or complete with external knowledge
+- An incomplete but accurate response is preferable to unreliable completeness
+
+BEGIN STRUCTURED RESPONSE
+${bt}${bt}${bt}
+
+**CRITICAL FORMATTING RULES:**
+- Translate these instructions to match the user's language for better NotebookLM understanding
+- Do NOT use decorative lines (===, ---) as they cause NotebookLM timeouts
+- Keep the user's original question wording intact
+
+**Question Type Adaptation:**
+
+1. **Comparison** (compare, vs, difference): Format as elements, similarities, differences, synthesis
+2. **List** (list, identify, which): Format as numbered items with descriptions and sources
+3. **Analysis** (analyze, examine, evaluate): Format as subject, observations, evidence, conclusions
+4. **Explanation** (explain, why, how): Format as concept, answer, examples, related info
+5. **Extraction** (default): Format as data points with quotes and sources
+
+**Example - Italian User:**
+
+User asks: "Analizza le sentenze presenti nei documenti"
+
+You structure as:
+${bt}${bt}${bt}
+ISTRUZIONI PER LA RISPOSTA
+
+COMPITO: Analizza le sentenze presenti nei documenti
+
+VINCOLI OPERATIVI
+- Usa ESCLUSIVAMENTE informazioni esplicite nei documenti caricati
+- NON aggiungere conoscenze esterne, interpretazioni o inferenze
+- Se un'informazione non è presente, dichiara: "[NON PRESENTE NEI DOCUMENTI]"
+
+FORMATO OUTPUT RICHIESTO
+Per ogni sentenza trovata:
+- SENTENZA: [identificativo]
+- OSSERVAZIONI: [analisi basata sui documenti]
+- EVIDENZE: "citazioni dirette" [Fonte]
+
+CITAZIONI
+- Ogni affermazione DEVE includere la fonte
+- Usa citazioni dirette tra virgolette dove possibile
+
+GESTIONE INFORMAZIONI MANCANTI
+- Se un'informazione non è nei documenti, dichiaralo esplicitamente
+
+INIZIO RISPOSTA STRUTTURATA
+${bt}${bt}${bt}
+
+**Example - English User:**
+
+User asks: "What are the main findings in the research papers?"
+
+You structure as:
+${bt}${bt}${bt}
+RESPONSE INSTRUCTIONS
+
+TASK: What are the main findings in the research papers?
+
+OPERATIONAL CONSTRAINTS
+- Use ONLY information explicitly present in uploaded documents
+- DO NOT add external knowledge or interpretations
+- If information is not present, state: "[NOT FOUND IN DOCUMENTS]"
+
+REQUIRED OUTPUT FORMAT
+For each finding:
+- FINDING: [description]
+- SOURCE: [document name/section]
+- QUOTE: "direct quote supporting the finding"
+
+CITATIONS
+- Every claim MUST include source
+- Use direct quotes where possible
+
+HANDLING MISSING INFORMATION
+- If information is missing, declare it explicitly
+
+BEGIN STRUCTURED RESPONSE
+${bt}${bt}${bt}
+
+**Response Handling:**
+After receiving NotebookLM's answer, present it faithfully to the user WITHOUT adding external knowledge or "improvements".
+`;
+
   if (active) {
     const topics = active.topics.join(", ");
     const useCases = active.use_cases.map((uc) => `  - ${uc}`).join("\n");
@@ -93,7 +209,9 @@ ${bt}${bt}${bt}
 - Default: active notebook (${active.id})
 - Or set notebook_id to use a library notebook
 - Or set notebook_url for ad-hoc notebooks (not in library)
-- If ambiguous which notebook fits, ASK the user which to use`;
+- If ambiguous which notebook fits, ASK the user which to use
+
+${structuringGuidelines}`;
   } else {
     return `# Conversational Research Partner (NotebookLM • Gemini 2.5 • Session RAG)
 
@@ -105,7 +223,9 @@ ${bt}${bt}${bt}
 
 > Auth tip: If login is required, use the prompt 'notebooklm.auth-setup' and then verify with the 'get_health' tool. If authentication later fails (e.g., expired cookies), use the prompt 'notebooklm.auth-repair'.
 
-Tip: Tell the user you can manage NotebookLM library and ask which notebook to use for the current task.`;
+Tip: Tell the user you can manage NotebookLM library and ask which notebook to use for the current task.
+
+${structuringGuidelines}`;
   }
 }
 
@@ -213,44 +333,6 @@ export const askQuestionTool: Tool = {
             },
           },
         },
-      },
-      enhance_prompt: {
-        type: "boolean",
-        description:
-          "Enable structured prompt enhancement for source fidelity. " +
-          "When true, the question is wrapped with instructions that force NotebookLM " +
-          "to respond ONLY from uploaded documents, cite sources, and declare when info is not found. " +
-          "Default: true (from ENV or config).",
-      },
-      prompt_mode: {
-        type: "string",
-        enum: ["strict", "balanced"],
-        description:
-          "Prompt enhancement mode. 'strict' (default): maximum source fidelity, " +
-          "no external knowledge allowed. 'balanced': allows some synthesis across documents.",
-      },
-      prompt_language: {
-        type: "string",
-        enum: ["en", "it", "auto"],
-        description:
-          "Language for prompt enhancement instructions. 'auto' (default): detect from question. " +
-          "'en': English instructions. 'it': Italian instructions.",
-      },
-      wrap_response: {
-        type: "boolean",
-        description:
-          "Enable response wrapping with containment instructions for Claude. " +
-          "When true, the NotebookLM response includes instructions telling Claude " +
-          "NOT to add external knowledge or make assumptions beyond the source documents. " +
-          "Default: true (from ENV or config).",
-      },
-      wrapper_mode: {
-        type: "string",
-        enum: ["strict", "balanced"],
-        description:
-          "Response wrapper mode. 'strict' (default): strong containment instructions, " +
-          "Claude must relay information faithfully without augmentation. " +
-          "'balanced': softer guidelines, Claude can add context if clearly distinguished.",
       },
     },
     required: ["question"],

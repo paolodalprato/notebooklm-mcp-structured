@@ -5,56 +5,53 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.0.1] - 2025-01-27
-
-### Fixed
-- **Critical: NotebookLM timeout issue** - Removed decorative lines (`===` and `---`) from structured prompts
-  - **Root cause**: NotebookLM interpreted lines of `=` or `-` characters as invalid formatting
-  - **Impact**: System would timeout waiting for NotebookLM response
-  - **Solution**: Changed to plain text section headers without decoration
-  - **Files changed**: `src/utils/prompt-enhancer.ts`
-  - **Documentation updated**: README.md, CUSTOM_MODIFICATIONS.md now show correct format
-
 ## [1.0.0] - 2025-01-27
 
 ### Added - Initial Release
 
-This is the first release of **notebooklm-mcp-structured**, a fork of [notebooklm-mcp](https://github.com/PleasePrompto/notebooklm-mcp) with enhanced features for professional use cases requiring document fidelity.
+This is the first release of **notebooklm-mcp-structured**, a fork of [notebooklm-mcp](https://github.com/PleasePrompto/notebooklm-mcp) with client-side prompt structuring for professional use cases requiring document fidelity.
 
-#### 🎯 Structured Prompt Enhancement
-- **Automatic prompt structuring** - Transforms simple questions into well-engineered prompts
-- **Question type detection** - Automatically detects and applies appropriate structure:
-  - Comparison (compare, vs, difference)
-  - List (list, which, identify)
-  - Analysis (analyze, examine, evaluate)
-  - Explanation (explain, why, how)
-  - Extraction (default)
-- **Explicit constraints** - Defines task, scope, and operational constraints
-- **Citation requirements** - Enforces source attribution and explicit quotes
-- **Missing information handling** - Requires explicit declaration of unavailable data
-- **Multi-language support** - Italian and English with auto-detection
+#### 🎯 Client-Side Prompt Structuring
 
-#### 🛡️ Response Wrapper (Claude Containment)
-- **Claude containment instructions** - Prevents Claude from adding external knowledge
-- **Source fidelity enforcement** - Ensures responses use only document-provided information
-- **Two modes available**:
-  - `strict` - No external knowledge allowed
-  - `balanced` - Synthesis allowed with clear labeling
+**Core Innovation:**
+- **Structuring guidelines embedded in tool description** - Instructs Claude on how to structure questions
+- **No server-side processing** - Questions pass through directly to NotebookLM
+- **Language support** - Adapts to user's language (tested with Italian, designed for all languages)
+- **Flexible adaptation** - Claude adjusts structure based on context and question type
 
-#### ⚙️ Configuration System
-- **Environment variable configuration**:
-  - `NOTEBOOKLM_ENHANCE_PROMPTS` - Enable/disable prompt enhancement
-  - `NOTEBOOKLM_PROMPT_MODE` - strict/balanced mode for prompts
-  - `NOTEBOOKLM_PROMPT_LANGUAGE` - en/it/auto language selection
-  - `NOTEBOOKLM_WRAP_RESPONSES` - Enable/disable response wrapping
-  - `NOTEBOOKLM_WRAPPER_MODE` - strict/balanced mode for responses
-- **Per-call parameter override** - All settings can be overridden per query
+**Implementation:**
+- Comprehensive guidelines in `ask_question` tool description (~120 lines)
+- Question type detection and adaptation (comparison, list, analysis, explanation, extraction)
+- Multilingual examples (Italian, English) as templates
+- Response handling instructions to prevent external knowledge addition
+
+**Key Features:**
+- **Source fidelity enforcement**: Responses come ONLY from uploaded documents
+- **Citation requirements**: Every claim must include source attribution
+- **Missing information handling**: Explicit declaration when data unavailable
+- **No decorative lines**: Plain text headers prevent NotebookLM timeouts
 
 #### 📚 Documentation
-- Comprehensive README with installation guides
-- Use case examples (legal, research, fact-checking)
-- Architecture overview
-- Configuration reference
+
+- Comprehensive README with installation and usage guide
+- CUSTOM_MODIFICATIONS.md explaining design decisions
+- Use case examples (legal analysis, research, fact-checking)
+- FAQ section addressing common questions
+
+#### 🏗️ Architecture
+
+**Simplified Design:**
+- Client-side structuring (Claude transforms questions)
+- Server passes questions directly without modification
+- No language detection or template management needed
+- Single source of truth (tool description)
+
+**Files Modified:**
+- `src/tools/definitions/ask-question.ts` - Added structuring guidelines
+- `src/tools/handlers.ts` - Simplified to pass questions directly
+
+**Files Removed:**
+- No server-side enhancement files (prompt-enhancer, response-wrapper)
 
 ### Technical Details
 
@@ -63,9 +60,24 @@ This is the first release of **notebooklm-mcp-structured**, a fork of [notebookl
 - **MCP SDK** 1.0.0 integration
 - **MIT License** (maintains original license)
 
+### Design Philosophy
+
+**Why Client-Side?**
+1. Language adaptation through Claude (tested with Italian)
+2. Simpler architecture (no server-side templates)
+3. More flexible (context-aware adaptation)
+4. Easier to maintain (single source of guidelines)
+5. Future-proof (updates only require tool description changes)
+6. Community feedback welcome for other languages
+
+**Critical Discovery:**
+- Decorative lines (`===`, `---`) cause NotebookLM timeouts
+- Plain text section headers work reliably
+- This finding informed the guideline formatting
+
 ### Credits
 
 - **Original notebooklm-mcp**: [Gérôme Dexheimer](https://github.com/PleasePrompto/notebooklm-mcp)
-- **Structured Prompts & Source Fidelity**: Paolo Dalprato
+- **Client-Side Structuring Approach**: Paolo Dalprato
 
 [1.0.0]: https://github.com/paolodalprato/notebooklm-mcp-structured/releases/tag/v1.0.0

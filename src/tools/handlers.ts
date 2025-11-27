@@ -17,8 +17,6 @@ import type {
 } from "../types.js";
 import { RateLimitError } from "../errors.js";
 import { CleanupManager } from "../utils/cleanup-manager.js";
-import { enhancePrompt, parseEnhancerConfigFromEnv, type PromptEnhancerConfig } from "../utils/prompt-enhancer.js";
-import { wrapResponse, parseWrapperConfigFromEnv, type ResponseWrapperConfig } from "../utils/response-wrapper.js";
 
 const FOLLOW_UP_REMINDER =
   "\n\nEXTREMELY IMPORTANT: Is that ALL you need to know? You can always ask another question using the same session ID! Think about it carefully: before you reply to the user, review their original request and this answer. If anything is still unclear or missing, ask me another question first.";
@@ -48,28 +46,16 @@ export class ToolHandlers {
       notebook_url?: string;
       show_browser?: boolean;
       browser_options?: BrowserOptions;
-      // Prompt enhancement options
-      enhance_prompt?: boolean;
-      prompt_mode?: "strict" | "balanced";
-      prompt_language?: "en" | "it" | "auto";
-      // Response wrapper options  
-      wrap_response?: boolean;
-      wrapper_mode?: "strict" | "balanced";
     },
     sendProgress?: ProgressCallback
   ): Promise<ToolResult<AskQuestionResult>> {
-    const { 
-      question, 
-      session_id, 
-      notebook_id, 
-      notebook_url, 
-      show_browser, 
-      browser_options,
-      enhance_prompt,
-      prompt_mode,
-      prompt_language,
-      wrap_response,
-      wrapper_mode
+    const {
+      question,
+      session_id,
+      notebook_id,
+      notebook_url,
+      show_browser,
+      browser_options
     } = args;
 
     log.info(`🔧 [TOOL] ask_question called`);
@@ -138,45 +124,10 @@ export class ToolHandlers {
       // Progress: Asking question
       await sendProgress?.("Asking question to NotebookLM...", 2, 5);
 
-      // Apply prompt enhancement if enabled
-      const envConfig = parseEnhancerConfigFromEnv();
-      const enhancerConfig: Partial<PromptEnhancerConfig> = {
-        ...envConfig,
-        // Override with explicit parameters if provided
-        ...(enhance_prompt !== undefined && { enabled: enhance_prompt }),
-        ...(prompt_mode !== undefined && { mode: prompt_mode }),
-        ...(prompt_language !== undefined && { language: prompt_language }),
-      };
-      
-      const enhancedQuestion = enhancePrompt(question, enhancerConfig);
-      
-      // Log if enhancement was applied
-      if (enhancedQuestion !== question) {
-        log.info(`  📝 Prompt enhanced (mode: ${enhancerConfig.mode || 'strict'})`);
-      }
+      // Ask the question directly (pass progress callback)
+      const rawAnswer = await session.ask(question, sendProgress);
 
-      // Ask the question (pass progress callback)
-      const rawAnswer = await session.ask(enhancedQuestion, sendProgress);
-      
-      // Apply response wrapper if enabled (to prevent Claude from adding external knowledge)
-      const wrapperEnvConfig = parseWrapperConfigFromEnv();
-      const wrapperConfig: Partial<ResponseWrapperConfig> = {
-        ...wrapperEnvConfig,
-        // Override with explicit parameters if provided
-        ...(wrap_response !== undefined && { enabled: wrap_response }),
-        ...(wrapper_mode !== undefined && { mode: wrapper_mode }),
-        // Use same language as prompt enhancement
-        ...(prompt_language !== undefined && { language: prompt_language }),
-      };
-      
-      const wrappedAnswer = wrapResponse(rawAnswer, wrapperConfig);
-      
-      // Log if wrapping was applied
-      if (wrappedAnswer !== rawAnswer) {
-        log.info(`  🔒 Response wrapped with containment instructions`);
-      }
-      
-      const answer = `${wrappedAnswer.trimEnd()}${FOLLOW_UP_REMINDER}`;
+      const answer = `${rawAnswer.trimEnd()}${FOLLOW_UP_REMINDER}`;
 
       // Get session info
       const sessionInfo = session.getInfo();

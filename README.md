@@ -1,54 +1,79 @@
 # NotebookLM MCP Structured
 
-Enhanced MCP server for NotebookLM with **structured prompts** and **source fidelity controls**.
+Enhanced MCP server for NotebookLM with **client-side prompt structuring** for **source fidelity**.
 
-This is a modified version of [notebooklm-mcp](https://github.com/PleasePrompto/notebooklm-mcp) that adds two key features for professional use cases where document fidelity is critical (legal analysis, research, fact-checking).
+This is a modified version of [notebooklm-mcp](https://github.com/PleasePrompto/notebooklm-mcp) that adds comprehensive structuring instructions to guide Claude in crafting prompts that enforce document fidelity for professional use cases (legal analysis, research, fact-checking).
 
 ## Key Features
 
-### 1. Structured Prompt Enhancement
+### Client-Side Prompt Structuring
 
-Transforms simple questions into well-engineered prompts that:
-- Define explicit task, scope, and constraints
-- Specify output format based on question type (comparison, list, analysis, extraction, explanation)
-- Require citations and source attribution
-- Handle missing information explicitly
+The MCP tool description includes comprehensive guidelines that instruct Claude on how to structure questions before sending them to NotebookLM. This ensures:
 
-**Before (simple question):**
+- **Source fidelity**: Responses come ONLY from uploaded documents
+- **Citation requirements**: Every claim includes source attribution
+- **Missing information handling**: Explicit declaration when data is unavailable
+- **Multi-language support**: Works naturally with any language Claude supports
+- **Question type adaptation**: Different structures for comparisons, lists, analyses, explanations, and extractions
+
+**How It Works:**
+
+1. User asks a simple question in any language
+2. Claude reads the structuring guidelines from the tool description
+3. Claude transforms the question into a well-structured prompt
+4. NotebookLM receives the structured prompt and responds accordingly
+5. Claude presents the response faithfully without adding external knowledge
+
+**Example Transformation:**
+
+Simple question:
 ```
-Analizza le sentenze presenti nei documenti
-```
-
-**After (structured prompt):**
-```
-ISTRUZIONI PER LA RISPOSTA
-
-COMPITO: Analizza le sentenze presenti nei documenti
-
-VINCOLI OPERATIVI
-- Usa ESCLUSIVAMENTE informazioni esplicite nei documenti caricati
-- NON aggiungere conoscenze esterne, interpretazioni o inferenze
-- Se un'informazione non è presente, dichiara: "[NON PRESENTE NEI DOCUMENTI]"
-
-FORMATO OUTPUT RICHIESTO
-[Auto-detected structure based on question type]
-
-CITAZIONI
-- Ogni affermazione DEVE includere la fonte
-- Usa citazioni dirette tra virgolette dove possibile
-- Formato citazione: "testo citato" [Fonte: nome documento]
-
-GESTIONE INFORMAZIONI MANCANTI
-- Se l'informazione richiesta non è nei documenti, dichiaralo esplicitamente
-
-INIZIO RISPOSTA STRUTTURATA
+What are the main findings in the research papers?
 ```
 
-**Note**: The prompt uses plain text headers WITHOUT decorative lines (no `===` or `---`) to prevent NotebookLM timeout issues.
+Claude structures it as:
+```
+RESPONSE INSTRUCTIONS
 
-### 2. Response Wrapper (Claude Containment)
+TASK: What are the main findings in the research papers?
 
-Adds instructions to NotebookLM responses that tell Claude NOT to add external knowledge. This prevents Claude from "enriching" responses with information not present in the source documents.
+OPERATIONAL CONSTRAINTS
+- Use ONLY information explicitly present in uploaded documents
+- DO NOT add external knowledge or interpretations
+- If information is not present, state: "[NOT FOUND IN DOCUMENTS]"
+
+REQUIRED OUTPUT FORMAT
+For each finding:
+- FINDING: [description]
+- SOURCE: [document name/section]
+- QUOTE: "direct quote supporting the finding"
+
+CITATIONS
+- Every claim MUST include source
+- Use direct quotes where possible
+
+HANDLING MISSING INFORMATION
+- If information is missing, declare it explicitly
+
+BEGIN STRUCTURED RESPONSE
+```
+
+**Critical Formatting Rule:**
+- **NO decorative lines** (no `===` or `---`) as they cause NotebookLM timeouts
+
+### Language Support
+
+**Tested with Italian** - works perfectly with Italian users and documents.
+
+**Other languages**: The system adapts to the user's language (detected from user profile/context). If you use notebooklm-mcp-structured with a language other than Italian, please share your experience!
+
+**How it works:**
+- Claude detects your language from your profile/context
+- Structuring instructions are translated to your language
+- NotebookLM responds in the same language
+- No configuration needed
+
+**Seeking testers**: If you use languages other than Italian, we'd love to hear if it works well for you. Please open an issue on GitHub with your feedback!
 
 ## Installation
 
@@ -89,13 +114,7 @@ Add to your `claude_desktop_config.json`:
       "command": "node",
       "args": [
         "/absolute/path/to/notebooklm-mcp-structured/dist/index.js"
-      ],
-      "env": {
-        "NOTEBOOKLM_ENHANCE_PROMPTS": "true",
-        "NOTEBOOKLM_PROMPT_MODE": "strict",
-        "NOTEBOOKLM_WRAP_RESPONSES": "true",
-        "NOTEBOOKLM_WRAPPER_MODE": "strict"
-      }
+      ]
     }
   }
 }
@@ -109,13 +128,7 @@ Add to your `claude_desktop_config.json`:
       "command": "node",
       "args": [
         "D:\\path\\to\\notebooklm-mcp-structured\\dist\\index.js"
-      ],
-      "env": {
-        "NOTEBOOKLM_ENHANCE_PROMPTS": "true",
-        "NOTEBOOKLM_PROMPT_MODE": "strict",
-        "NOTEBOOKLM_WRAP_RESPONSES": "true",
-        "NOTEBOOKLM_WRAPPER_MODE": "strict"
-      }
+      ]
     }
   }
 }
@@ -129,89 +142,112 @@ After restarting Claude Desktop:
 3. A browser window will open for Google login
 4. Complete login and close the browser
 
-## Configuration
-
-### Environment Variables
-
-| Variable | Values | Default | Description |
-|----------|--------|---------|-------------|
-| `NOTEBOOKLM_ENHANCE_PROMPTS` | `true`/`false` | `true` | Enable structured prompt enhancement |
-| `NOTEBOOKLM_PROMPT_MODE` | `strict`/`balanced` | `strict` | Strict = no external knowledge; Balanced = synthesis allowed |
-| `NOTEBOOKLM_PROMPT_LANGUAGE` | `en`/`it`/`auto` | `auto` | Language for prompt instructions |
-| `NOTEBOOKLM_WRAP_RESPONSES` | `true`/`false` | `true` | Add containment instructions to responses |
-| `NOTEBOOKLM_WRAPPER_MODE` | `strict`/`balanced` | `strict` | Strength of containment instructions |
-
-### Per-call Parameters
-
-Override settings for individual queries:
-
-```javascript
-ask_question({
-  question: "Your question",
-  notebook_id: "your-notebook",
-  enhance_prompt: true,
-  prompt_mode: "strict",
-  prompt_language: "it",
-  wrap_response: true,
-  wrapper_mode: "strict"
-})
-```
-
 ## Use Cases
 
 ### Legal Document Analysis
 - Extract specific clauses with citations
 - Compare rulings across cases
 - Identify patterns in jurisprudence
+- Ensure responses come only from case documents
 
 ### Research
 - Literature review with source tracking
 - Fact extraction from multiple documents
 - Cross-reference verification
+- Prevent mixing document content with external knowledge
 
 ### Professional Fact-Checking
 - Verify claims against source documents
 - Identify what's explicitly stated vs. inferred
 - Maintain audit trail with citations
-
-## How It Works
-
-### Question Type Detection
-
-The enhancer automatically detects question type and applies appropriate structure:
-
-| Type | Trigger Words | Output Structure |
-|------|--------------|------------------|
-| Comparison | "compare", "vs", "difference" | Elements, Similarities, Differences, Synthesis |
-| List | "list", "which", "identify" | Elements with descriptions and sources |
-| Analysis | "analyze", "examine", "evaluate" | Subject, Observations, Patterns, Conclusions |
-| Explanation | "explain", "why", "how" | Concept, Answer, Examples, Related info |
-| Extraction | (default) | Data, Quotes, Sources |
-
-### Language Support
-
-Currently supports:
-- 🇮🇹 Italian
-- 🇬🇧 English
-
-Language is auto-detected from the question or can be set explicitly.
+- Ensure complete transparency of information sources
 
 ## Architecture
 
 ```
-Claude <---> NotebookLM MCP Custom <---> NotebookLM (Gemini)
-                    |
-                    ├── prompt-enhancer.ts  (structures outgoing prompts)
-                    └── response-wrapper.ts (adds containment to responses)
+User Question → Claude (reads structuring guidelines) → Structured Prompt → NotebookLM (Gemini) → Source-Faithful Response → User
 ```
 
-The key insight: NotebookLM provides source-faithful extraction, Claude provides reasoning and synthesis. This MCP ensures the boundary is respected.
+### Why Client-Side Structuring?
+
+**Advantages:**
+1. **Multilingual by default**: Claude naturally handles any language
+2. **Simpler architecture**: No server-side template management
+3. **Flexible adaptation**: Claude adjusts structure based on context
+4. **Future-proof**: Updates to structuring logic just require tool description changes
+
+**How It Works:**
+- Structuring guidelines embedded in tool description
+- Claude reads guidelines and applies them to user questions
+- No server-side processing or language detection needed
+- Works seamlessly across all languages Claude supports
+
+### Question Type Detection
+
+Claude automatically detects question type and applies appropriate structure:
+
+| Type | Trigger Words | Output Structure |
+|------|--------------|------------------|
+| Comparison | "compare", "vs", "difference" | Elements, Similarities, Differences, Synthesis |
+| List | "list", "identify", "which" | Numbered items with descriptions and sources |
+| Analysis | "analyze", "examine", "evaluate" | Subject, Observations, Evidence, Conclusions |
+| Explanation | "explain", "why", "how" | Concept, Answer, Examples, Related info |
+| Extraction | (default) | Data points with quotes and sources |
+
+## Tools Available
+
+### Core Tools
+- `ask_question` - Ask questions to NotebookLM with session management
+- `list_sessions` - View all active conversation sessions
+- `close_session` - Close a specific session
+- `reset_session` - Reset a session to start fresh
+
+### Authentication
+- `get_health` - Check authentication and system status
+- `setup_auth` - Initial Google login
+- `re_auth` - Switch Google accounts or recover from rate limits
+
+### Notebook Library Management
+- `add_notebook` - Add a notebook to your library
+- `list_notebooks` - View all notebooks in your library
+- `get_notebook` - Get details of a specific notebook
+- `select_notebook` - Set active notebook
+- `update_notebook` - Update notebook metadata
+- `remove_notebook` - Remove notebook from library
+- `search_notebooks` - Search notebooks by keywords
+- `get_library_stats` - View library statistics
+
+### Maintenance
+- `cleanup_data` - Clean up browser data and authentication files
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit issues or pull requests.
 
 ## Credits
 
 - Original `notebooklm-mcp`: [Gérôme Dexheimer](https://github.com/PleasePrompto/notebooklm-mcp)
-- Modifications: Paolo Dalprato
+- Client-side structuring approach: Paolo Dalprato
 
 ## License
 
 MIT
+
+---
+
+## FAQ
+
+**Q: Does this work with languages other than Italian?**
+A: The system is designed to work with any language Claude supports. It has been tested with Italian and works perfectly. If you use another language, the system should adapt automatically to your profile language. We're seeking feedback from users of other languages!
+
+**Q: Why not use server-side templates?**
+A: Client-side structuring is simpler, more flexible, and naturally multilingual. Claude can adapt the structure to context better than fixed templates.
+
+**Q: Can I customize the structuring guidelines?**
+A: The guidelines are embedded in the tool description (`src/tools/definitions/ask-question.ts`). You can modify them and rebuild.
+
+**Q: What happens if I don't structure my prompts?**
+A: NotebookLM might mix document content with its general knowledge. Structured prompts enforce source fidelity.
+
+**Q: Are there any rate limits?**
+A: Free Google accounts have 50 queries/day to NotebookLM. Google AI Pro/Ultra accounts have 5x higher limits.
