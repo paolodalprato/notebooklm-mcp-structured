@@ -1,6 +1,6 @@
 {
   "name": "notebooklm-mcp-structured",
-  "version": "1.3.0",
+  "version": "1.0.0",
   "description": "Enhanced MCP server for NotebookLM with structured prompts and source fidelity controls",
   "type": "module",
   "bin": {
