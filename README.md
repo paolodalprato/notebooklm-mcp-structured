@@ -210,7 +210,7 @@ The key insight: NotebookLM provides source-faithful extraction, Claude provides
 ## Credits
 
 - Original `notebooklm-mcp`: [Gérôme Dexheimer](https://github.com/PleasePrompto/notebooklm-mcp)
-- Modifications: Paolo Dal Prato
+- Modifications: Paolo Dalprato
 
 ## License
 

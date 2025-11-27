@@ -236,7 +236,7 @@ The modifications maintain full backward compatibility:
 ## Credits
 
 - **Original Architecture**: [Gérôme Dexheimer](https://github.com/PleasePrompto/notebooklm-mcp)
-- **Structured Prompts & Source Fidelity Enhancements**: Paolo Dal Prato
+- **Structured Prompts & Source Fidelity Enhancements**: Paolo Dalprato
 
 ## License
 

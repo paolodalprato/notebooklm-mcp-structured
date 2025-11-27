@@ -25,7 +25,7 @@
     "structured-prompts",
     "source-fidelity"
   ],
-  "author": "Paolo Dal Prato (modifications) / Gérôme Dexheimer (original)",
+  "author": "Paolo Dalprato (modifications) / Gérôme Dexheimer (original)",
   "license": "MIT",
   "repository": {
     "type": "git",

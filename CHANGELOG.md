@@ -66,6 +66,6 @@ This is the first release of **notebooklm-mcp-structured**, a fork of [notebookl
 ### Credits
 
 - **Original notebooklm-mcp**: [Gérôme Dexheimer](https://github.com/PleasePrompto/notebooklm-mcp)
-- **Structured Prompts & Source Fidelity**: Paolo Dal Prato
+- **Structured Prompts & Source Fidelity**: Paolo Dalprato
 
 [1.0.0]: https://github.com/paolodalprato/notebooklm-mcp-structured/releases/tag/v1.0.0
