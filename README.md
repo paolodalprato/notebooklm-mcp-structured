@@ -21,31 +21,30 @@ Analizza le sentenze presenti nei documenti
 
 **After (structured prompt):**
 ```
-================================================================================
 ISTRUZIONI PER LA RISPOSTA
-================================================================================
 
 COMPITO: Analizza le sentenze presenti nei documenti
 
---------------------------------------------------------------------------------
 VINCOLI OPERATIVI
---------------------------------------------------------------------------------
 - Usa ESCLUSIVAMENTE informazioni esplicite nei documenti caricati
 - NON aggiungere conoscenze esterne, interpretazioni o inferenze
 - Se un'informazione non è presente, dichiara: "[NON PRESENTE NEI DOCUMENTI]"
 
---------------------------------------------------------------------------------
 FORMATO OUTPUT RICHIESTO
---------------------------------------------------------------------------------
 [Auto-detected structure based on question type]
 
---------------------------------------------------------------------------------
 CITAZIONI
---------------------------------------------------------------------------------
 - Ogni affermazione DEVE includere la fonte
 - Usa citazioni dirette tra virgolette dove possibile
-...
+- Formato citazione: "testo citato" [Fonte: nome documento]
+
+GESTIONE INFORMAZIONI MANCANTI
+- Se l'informazione richiesta non è nei documenti, dichiaralo esplicitamente
+
+INIZIO RISPOSTA STRUTTURATA
 ```
+
+**Note**: The prompt uses plain text headers WITHOUT decorative lines (no `===` or `---`) to prevent NotebookLM timeout issues.
 
 ### 2. Response Wrapper (Claude Containment)
 

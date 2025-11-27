@@ -114,39 +114,27 @@ function buildStructuredPromptIT(
 
   const formatInstructions = getFormatInstructionsIT(questionType);
 
-  return `================================================================================
-ISTRUZIONI PER LA RISPOSTA
-================================================================================
+  return `ISTRUZIONI PER LA RISPOSTA
 
 COMPITO: ${question}
 
---------------------------------------------------------------------------------
 VINCOLI OPERATIVI
---------------------------------------------------------------------------------
 ${modeInstructions}
 
---------------------------------------------------------------------------------
 FORMATO OUTPUT RICHIESTO
---------------------------------------------------------------------------------
 ${formatInstructions}
 
---------------------------------------------------------------------------------
 CITAZIONI
---------------------------------------------------------------------------------
 - Ogni affermazione DEVE includere la fonte (nome documento o sezione)
 - Usa citazioni dirette tra virgolette dove possibile
 - Formato citazione: "testo citato" [Fonte: nome documento]
 
---------------------------------------------------------------------------------
 GESTIONE INFORMAZIONI MANCANTI
---------------------------------------------------------------------------------
 - Se l'informazione richiesta non è nei documenti, dichiaralo esplicitamente
 - Non inventare, non inferire, non completare con conoscenze esterne
 - È preferibile una risposta incompleta ma accurata a una completa ma inaffidabile
 
-================================================================================
-INIZIO RISPOSTA STRUTTURATA
-================================================================================`;
+INIZIO RISPOSTA STRUTTURATA`;
 }
 
 /**
@@ -167,39 +155,27 @@ function buildStructuredPromptEN(
 
   const formatInstructions = getFormatInstructionsEN(questionType);
 
-  return `================================================================================
-RESPONSE INSTRUCTIONS
-================================================================================
+  return `RESPONSE INSTRUCTIONS
 
 TASK: ${question}
 
---------------------------------------------------------------------------------
 OPERATIONAL CONSTRAINTS
---------------------------------------------------------------------------------
 ${modeInstructions}
 
---------------------------------------------------------------------------------
 REQUIRED OUTPUT FORMAT
---------------------------------------------------------------------------------
 ${formatInstructions}
 
---------------------------------------------------------------------------------
 CITATIONS
---------------------------------------------------------------------------------
 - Every claim MUST include source (document name or section)
 - Use direct quotes where possible
 - Citation format: "quoted text" [Source: document name]
 
---------------------------------------------------------------------------------
 HANDLING MISSING INFORMATION
---------------------------------------------------------------------------------
 - If requested information is not in documents, state it explicitly
 - Do not invent, infer, or complete with external knowledge
 - An incomplete but accurate response is preferable to a complete but unreliable one
 
-================================================================================
-BEGIN STRUCTURED RESPONSE
-================================================================================`;
+BEGIN STRUCTURED RESPONSE`;
 }
 
 /**
