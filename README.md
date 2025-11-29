@@ -2,6 +2,8 @@
 
 Enhanced MCP server for NotebookLM with **client-side prompt structuring** for **source fidelity**.
 
+> **Requirements:** This MCP server is designed to work with **Claude Desktop**. It requires Claude Desktop to be installed and configured to use MCP servers.
+
 This is a modified version of [notebooklm-mcp](https://github.com/PleasePrompto/notebooklm-mcp) that adds comprehensive structuring instructions to guide Claude in crafting prompts that enforce document fidelity for professional use cases (legal analysis, research, fact-checking).
 
 ## Key Features
@@ -75,10 +77,24 @@ BEGIN STRUCTURED RESPONSE
 
 **Seeking testers**: If you use languages other than Italian, we'd love to hear if it works well for you. Please open an issue on GitHub with your feedback!
 
+### Automatic Connection Verification
+
+The MCP server automatically verifies the connection to NotebookLM before executing any operation that requires it. This ensures a smooth user experience:
+
+**How it works:**
+1. When you make a request that requires NotebookLM (e.g., asking a question), the server checks if authentication is valid
+2. If authentication is expired or missing:
+   - **Chrome is running:** You'll receive a message asking to close Chrome first
+   - **Chrome is closed:** A browser window opens automatically for Google login
+3. After successful login, your original request proceeds automatically
+
+**No manual intervention needed** - the server handles authentication seamlessly within the conversation flow.
+
 ## Installation
 
 ### Prerequisites
 
+- **Claude Desktop** - Required to use this MCP server
 - Node.js >= 18.0.0
 - npm
 - A Google account for NotebookLM access
@@ -196,14 +212,16 @@ Claude automatically detects question type and applies appropriate structure:
 
 ## Tools Available
 
-### Core Tools
-- `ask_question` - Ask questions to NotebookLM with session management
+### Core Tools (require NotebookLM connection)
+- `ask_question` - Ask questions to NotebookLM with session management *(triggers auto-auth if needed)*
+- `reset_session` - Reset a session to start fresh *(triggers auto-auth if needed)*
+
+### Session Management
 - `list_sessions` - View all active conversation sessions
 - `close_session` - Close a specific session
-- `reset_session` - Reset a session to start fresh
 
-### Authentication
-- `get_health` - Check authentication and system status
+### Authentication & Diagnostics
+- `get_health` - Check authentication, connection status, and Chrome state *(enhanced diagnostics)*
 - `setup_auth` - Initial Google login
 - `re_auth` - Switch Google accounts or recover from rate limits
 
@@ -236,6 +254,9 @@ MIT
 ---
 
 ## FAQ
+
+**Q: Does this work with Claude Code or other MCP clients?**
+A: This MCP server is specifically designed for **Claude Desktop**. While other MCP-compatible clients might work, the automatic connection verification and authentication flow are optimized for the Claude Desktop experience.
 
 **Q: Does this work with languages other than Italian?**
 A: The system is designed to work with any language Claude supports. It has been tested with Italian and works perfectly. If you use another language, the system should adapt automatically to your profile language. We're seeking feedback from users of other languages!

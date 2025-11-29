@@ -17,6 +17,7 @@ import type {
 } from "../types.js";
 import { RateLimitError } from "../errors.js";
 import { CleanupManager } from "../utils/cleanup-manager.js";
+import { ConnectionChecker } from "../utils/connection-checker.js";
 
 const FOLLOW_UP_REMINDER =
   "\n\nEXTREMELY IMPORTANT: Is that ALL you need to know? You can always ask another question using the same session ID! Think about it carefully: before you reply to the user, review their original request and this answer. If anything is still unclear or missing, ask me another question first.";
@@ -28,11 +29,117 @@ export class ToolHandlers {
   private sessionManager: SessionManager;
   private authManager: AuthManager;
   private library: NotebookLibrary;
+  private connectionChecker: ConnectionChecker;
 
   constructor(sessionManager: SessionManager, authManager: AuthManager, library: NotebookLibrary) {
     this.sessionManager = sessionManager;
     this.authManager = authManager;
     this.library = library;
+    this.connectionChecker = new ConnectionChecker(authManager);
+  }
+
+  // ============================================================================
+  // Connection Pre-Check (Session Start Verification)
+  // ============================================================================
+
+  /**
+   * Ensure connection to NotebookLM is ready before executing a tool
+   *
+   * This method is called automatically before any tool that requires
+   * a connection to NotebookLM (e.g., ask_question).
+   *
+   * Flow:
+   * 1. Check if auth state is valid → proceed if yes
+   * 2. If auth invalid, check if Chrome is running
+   * 3. If Chrome running → return error asking user to close it
+   * 4. If Chrome closed → perform auto-auth and proceed
+   *
+   * @param sendProgress Optional progress callback for UI updates
+   * @returns ConnectionCheckResult or null if ready to proceed
+   */
+  async ensureConnectionReady(
+    sendProgress?: ProgressCallback
+  ): Promise<{ ready: true } | { ready: false; result: ToolResult<any> }> {
+    log.info("🔌 [PRE-CHECK] Verifying NotebookLM connection...");
+    await sendProgress?.("Verifying NotebookLM connection...", 0, 5);
+
+    const checkResult = await this.connectionChecker.checkConnection();
+
+    if (checkResult.isReady) {
+      log.success("✅ [PRE-CHECK] Connection ready");
+      return { ready: true };
+    }
+
+    // Auth not valid - need to handle
+    if (checkResult.requiresUserAction) {
+      // Chrome is running - user must close it
+      log.warning("🚫 [PRE-CHECK] Chrome is running - user action required");
+      return {
+        ready: false,
+        result: {
+          success: false,
+          error: checkResult.userActionMessage || "Chrome must be closed before authentication",
+          data: {
+            status: "chrome_running",
+            requires_action: true,
+            action: "close_chrome",
+            message: checkResult.userActionMessage,
+            timeout_seconds: 60,
+          } as any,
+        },
+      };
+    }
+
+    if (checkResult.canAutoAuth) {
+      // Chrome is closed - can proceed with auto-auth
+      log.info("🔐 [PRE-CHECK] Starting automatic authentication...");
+      await sendProgress?.("Authentication required - starting login...", 1, 5);
+
+      try {
+        // Perform interactive authentication
+        const authSuccess = await this.authManager.performSetup(sendProgress);
+
+        if (authSuccess) {
+          log.success("✅ [PRE-CHECK] Authentication successful");
+          await sendProgress?.("Authentication successful!", 2, 5);
+          return { ready: true };
+        } else {
+          log.error("❌ [PRE-CHECK] Authentication failed");
+          return {
+            ready: false,
+            result: {
+              success: false,
+              error:
+                "Authentication failed. Please try again or use the setup_auth tool directly.\n\n" +
+                "If the problem persists, try:\n" +
+                "1. Close all Chrome windows\n" +
+                "2. Run cleanup_data(confirm=true) to reset\n" +
+                "3. Try your request again",
+            },
+          };
+        }
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        log.error(`❌ [PRE-CHECK] Authentication error: ${errorMessage}`);
+        return {
+          ready: false,
+          result: {
+            success: false,
+            error: `Authentication error: ${errorMessage}`,
+          },
+        };
+      }
+    }
+
+    // Fallback - should not reach here
+    log.error("❌ [PRE-CHECK] Unexpected state");
+    return {
+      ready: false,
+      result: {
+        success: false,
+        error: "Unexpected connection state. Please try setup_auth manually.",
+      },
+    };
   }
 
   /**
@@ -69,6 +176,16 @@ export class ToolHandlers {
     if (notebook_url) {
       log.info(`  Notebook URL: ${notebook_url}`);
     }
+
+    // =========================================================================
+    // PRE-CHECK: Verify connection to NotebookLM is ready
+    // =========================================================================
+    const connectionCheck = await this.ensureConnectionReady(sendProgress);
+    if (!connectionCheck.ready) {
+      log.warning("🚫 [TOOL] ask_question blocked - connection not ready");
+      return connectionCheck.result as ToolResult<AskQuestionResult>;
+    }
+    // =========================================================================
 
     try {
       // Resolve notebook URL
@@ -291,13 +408,26 @@ export class ToolHandlers {
   /**
    * Handle reset_session tool
    */
-  async handleResetSession(args: { session_id: string }): Promise<
+  async handleResetSession(
+    args: { session_id: string },
+    sendProgress?: ProgressCallback
+  ): Promise<
     ToolResult<{ status: string; message: string; session_id: string }>
   > {
     const { session_id } = args;
 
     log.info(`🔧 [TOOL] reset_session called`);
     log.info(`  Session ID: ${session_id}`);
+
+    // =========================================================================
+    // PRE-CHECK: Verify connection to NotebookLM is ready
+    // =========================================================================
+    const connectionCheck = await this.ensureConnectionReady(sendProgress);
+    if (!connectionCheck.ready) {
+      log.warning("🚫 [TOOL] reset_session blocked - connection not ready");
+      return connectionCheck.result as ToolResult<{ status: string; message: string; session_id: string }>;
+    }
+    // =========================================================================
 
     try {
       const session = this.sessionManager.getSession(session_id);
@@ -334,11 +464,16 @@ export class ToolHandlers {
 
   /**
    * Handle get_health tool
+   *
+   * Enhanced with connection status check including Chrome browser state.
+   * This is a diagnostic tool - it reports status but does NOT block or auto-fix.
    */
   async handleGetHealth(): Promise<
     ToolResult<{
       status: string;
       authenticated: boolean;
+      connection_ready: boolean;
+      chrome_running: boolean;
       notebook_url: string;
       active_sessions: number;
       max_sessions: number;
@@ -348,7 +483,7 @@ export class ToolHandlers {
       auto_login_enabled: boolean;
       stealth_enabled: boolean;
       troubleshooting_tip?: string;
-    }> 
+    }>
   > {
     log.info(`🔧 [TOOL] get_health called`);
 
@@ -357,12 +492,24 @@ export class ToolHandlers {
       const statePath = await this.authManager.getValidStatePath();
       const authenticated = statePath !== null;
 
+      // Check connection status (including Chrome state)
+      const connectionStatus = await this.connectionChecker.checkConnection();
+      const chromeRunning = await this.connectionChecker.isChromeRunning();
+
       // Get session stats
       const stats = this.sessionManager.getStats();
 
+      // Determine overall status
+      let status = "ok";
+      if (!authenticated) {
+        status = chromeRunning ? "auth_required_chrome_open" : "auth_required";
+      }
+
       const result = {
-        status: "ok",
+        status,
         authenticated,
+        connection_ready: connectionStatus.isReady,
+        chrome_running: chromeRunning,
         notebook_url: CONFIG.notebookUrl || "not configured",
         active_sessions: stats.active_sessions,
         max_sessions: stats.max_sessions,
@@ -371,11 +518,11 @@ export class ToolHandlers {
         headless: CONFIG.headless,
         auto_login_enabled: CONFIG.autoLoginEnabled,
         stealth_enabled: CONFIG.stealthEnabled,
-        // Add troubleshooting tip if not authenticated
+        // Add troubleshooting tip based on status
         ...((!authenticated) && {
-          troubleshooting_tip:
-            "For fresh start with clean browser session: Close all Chrome instances → " +
-            "cleanup_data(confirm=true, preserve_library=true) → setup_auth"
+          troubleshooting_tip: chromeRunning
+            ? "Chrome is running. Close all Chrome windows first, then retry your request or use setup_auth."
+            : "Authentication required. Your next request will automatically open a browser for login."
         }),
       };
 

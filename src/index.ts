@@ -240,7 +240,8 @@ class NotebookLMMCPServer {
 
           case "reset_session":
             result = await this.toolHandlers.handleResetSession(
-              args as { session_id: string }
+              args as { session_id: string },
+              sendProgress
             );
             break;
 
