@@ -14,8 +14,6 @@ data/
 browser_state/
 chrome_profile/
 .notebooklm-mcp/
-.claude/
-CLAUDE.md
 
 # IDE
 .vscode/
@@ -33,13 +31,5 @@ Thumbs.db
 npm-debug.log*
 screenshots/
 
-# Archives / local notes
+# Archives
 *.tar.gz
-mcp-add-command.txt
-docs/why-notebooklm.md
-
-# Python (from old version)
-__pycache__/
-*.py[cod]
-.venv/
-venv/
