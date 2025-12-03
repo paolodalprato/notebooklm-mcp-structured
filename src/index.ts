@@ -66,7 +66,7 @@ class NotebookLMMCPServer {
     this.server = new Server(
       {
         name: "notebooklm-mcp",
-        version: "1.1.0",
+        version: "1.0.0",
       },
       {
         capabilities: {
@@ -103,7 +103,7 @@ class NotebookLMMCPServer {
 
     const activeSettings = this.settingsManager.getEffectiveSettings();
     log.info("🚀 NotebookLM MCP Server initialized");
-    log.info(`  Version: 1.1.0`);
+    log.info(`  Version: 1.0.0`);
     log.info(`  Node: ${process.version}`);
     log.info(`  Platform: ${process.platform}`);
     log.info(`  Profile: ${activeSettings.profile} (${this.toolDefinitions.length} tools active)`);
