@@ -1,21 +1,28 @@
 #!/usr/bin/env node
 
 /**
- * NotebookLM MCP Server
+ * NotebookLM MCP Structured v1.0.0
  *
- * MCP Server for Google NotebookLM - Chat with Gemini 2.5 through NotebookLM
- * with session support and human-like behavior!
+ * Enhanced MCP Server for NotebookLM with client-side prompt structuring
+ * for source fidelity in professional document analysis.
  *
- * Features:
+ * Fork of: https://github.com/PleasePrompto/notebooklm-mcp
+ * Author: Paolo Dalprato
+ *
+ * Key Features (Structured Fork):
+ * - Client-side prompt structuring for source fidelity
+ * - Automatic question type detection (comparison, list, analysis, explanation, extraction)
+ * - Citation requirements and [NOT FOUND IN DOCUMENTS] handling
+ * - Automatic connection verification with auth recovery
+ * - Multi-language support (tested with Italian)
+ *
+ * Inherited Features:
  * - Session-based contextual conversations
- * - Auto re-login on session expiry
  * - Human-like typing and mouse movements
  * - Persistent browser fingerprint
  * - Stealth mode with Patchright
- * - Claude Code integration via npx
  *
  * Usage:
- *   npx notebooklm-mcp
  *   node dist/index.js
  *
  * Environment Variables:
@@ -27,7 +34,7 @@
  *   MAX_SESSIONS - Maximum concurrent sessions (default: 10)
  *   SESSION_TIMEOUT - Session timeout in seconds (default: 900)
  *
- * Based on the Python NotebookLM API implementation
+ * See README.md for full documentation.
  */
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
