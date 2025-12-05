@@ -1,6 +1,37 @@
 ## Configuration
 
+> **NotebookLM MCP Structured v1.0.0** - Enhanced MCP server with client-side prompt structuring for source fidelity.
+
 **No config files needed!** The server works out of the box with sensible defaults.
+
+---
+
+## Structured Prompts (Key Feature)
+
+This fork automatically structures your questions before sending them to NotebookLM. **No configuration required** - structuring is always active.
+
+### What Gets Structured
+- **Source fidelity constraints**: Responses use ONLY uploaded documents
+- **Citation requirements**: Every claim includes source attribution
+- **Missing info handling**: Explicit `[NOT FOUND IN DOCUMENTS]` declarations
+- **Question type detection**: Automatic structure based on question type
+
+### Question Types (Auto-Detected)
+| Type | Trigger Words | Output Structure |
+|------|--------------|------------------|
+| Comparison | "compare", "vs", "difference" | Elements, Similarities, Differences, Synthesis |
+| List | "list", "identify", "which" | Numbered items with descriptions and sources |
+| Analysis | "analyze", "examine", "evaluate" | Subject, Observations, Evidence, Conclusions |
+| Explanation | "explain", "why", "how" | Concept, Answer, Examples, Related info |
+| Extraction | (default) | Data points with quotes and sources |
+
+### Customizing Structuring Guidelines
+The guidelines are embedded in `src/tools/definitions/ask-question.ts`. To customize:
+1. Edit the file
+2. Run `npm run build`
+3. Restart Claude Desktop
+
+⚠️ **Critical**: Never use decorative lines (`===` or `---`) in prompts - they cause NotebookLM timeouts.
 
 ### Configuration Priority (highest to lowest):
 1. **Tool Parameters** - Claude passes settings like `browser_options` at runtime

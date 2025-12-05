@@ -1,5 +1,46 @@
 ## Troubleshooting
 
+> **NotebookLM MCP Structured v1.0.0** - Troubleshooting guide for structured prompts and source fidelity.
+
+---
+
+## Structured Prompts Issues
+
+### NotebookLM timeout / No response
+- **Cause**: Decorative lines (`===` or `---`) in the prompt
+- **Fix**: The structured fork automatically avoids these. If you customized `ask-question.ts`, ensure NO decorative separators.
+
+### Responses include external knowledge
+- **Cause**: Prompt structuring not applied correctly
+- **Fix**:
+  1. Verify you're using `ask_question` tool (structuring is automatic)
+  2. Check `src/tools/definitions/ask-question.ts` hasn't been modified incorrectly
+  3. Rebuild with `npm run build` and restart Claude Desktop
+
+### Missing citations in response
+- **Cause**: NotebookLM didn't follow structuring instructions
+- **Fix**: Ask a more specific question. General questions may produce less structured responses.
+
+### `[NOT FOUND IN DOCUMENTS]` appears unexpectedly
+- **Cause**: The requested information isn't in your uploaded documents
+- **This is expected behavior** - it means source fidelity is working correctly!
+
+---
+
+## Authentication Issues
+
+### Chrome must be closed
+- **Symptom**: "Please close Chrome before authentication setup"
+- **Fix**: Close ALL Chrome/Chromium windows, then retry `setup_auth`
+
+### Auto-auth not triggering
+- **Symptom**: `ask_question` fails without opening login
+- **Fix**: Run `get_health` first to check status, then `setup_auth` manually
+
+---
+
+## General Issues
+
 ### Fresh start / Deep cleanup
 If you're experiencing persistent issues, corrupted data, or want to start completely fresh:
 

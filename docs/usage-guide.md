@@ -1,245 +1,316 @@
-# Advanced Usage Guide
+# Usage Guide - Structured Prompts & Source Fidelity
 
-This guide covers advanced usage patterns, best practices, and detailed examples for the NotebookLM MCP server.
+> **NotebookLM MCP Structured v1.0.0** - Client-side prompt structuring for professional document analysis.
 
-> 📘 For installation and quick start, see the main [README](../README.md).
+This guide covers usage patterns optimized for **source fidelity** - ensuring responses come ONLY from your uploaded documents with proper citations.
 
-## Research Patterns
+> For installation and quick start, see the main [README](../README.md).
 
-### The Iterative Research Pattern
+---
 
-The server is designed to make your agent **ask questions automatically** with NotebookLM. Here's how to leverage this:
+## Core Concept: Structured Prompts
 
-1. **Start with broad context**
-   ```
-   "Before implementing the webhook system, research the complete webhook architecture in NotebookLM, including error handling, retry logic, and security considerations."
-   ```
+Unlike the original MCP server, this fork **automatically transforms** your questions into structured prompts that enforce:
 
-2. **The agent will automatically**:
-   - Ask an initial question to NotebookLM
-   - Read the reminder at the end of each response
-   - Ask follow-up questions to gather more details
-   - Continue until it has comprehensive understanding
-   - Only then provide you with a complete answer
+1. **Source constraints**: NotebookLM uses ONLY your uploaded documents
+2. **Citations**: Every claim includes document source attribution
+3. **Explicit gaps**: Missing information declared as `[NOT FOUND IN DOCUMENTS]`
+4. **Consistent format**: Output structured by question type
 
-3. **Session management**
-   - The agent maintains the same `session_id` throughout the research
-   - This preserves context across multiple questions
-   - Sessions auto-cleanup after 15 minutes of inactivity
-
-### Deep Dive Example
+### How It Works
 
 ```
-User: "I need to implement OAuth2 with refresh tokens. Research the complete flow first."
+Your question: "What are the main findings?"
 
-Agent behavior:
-1. Asks NotebookLM: "How does OAuth2 refresh token flow work?"
-2. Gets answer with reminder to ask more
-3. Asks: "What are the security best practices for storing refresh tokens?"
-4. Asks: "How to handle token expiration and renewal?"
-5. Asks: "What are common implementation pitfalls?"
-6. Synthesizes all answers into comprehensive implementation plan
+Claude structures it as:
+┌─────────────────────────────────────────────┐
+│ RESPONSE INSTRUCTIONS                       │
+│                                             │
+│ TASK: What are the main findings?           │
+│                                             │
+│ OPERATIONAL CONSTRAINTS                     │
+│ - Use ONLY information from documents       │
+│ - DO NOT add external knowledge             │
+│ - If not found: "[NOT FOUND IN DOCUMENTS]"  │
+│                                             │
+│ REQUIRED OUTPUT FORMAT                      │
+│ For each finding:                           │
+│ - FINDING: [description]                    │
+│ - SOURCE: [document name/section]           │
+│ - QUOTE: "direct quote"                     │
+│                                             │
+│ BEGIN STRUCTURED RESPONSE                   │
+└─────────────────────────────────────────────┘
+
+NotebookLM responds with source-faithful answer
 ```
 
-## Notebook Management Strategies
+**You just ask naturally** - Claude handles the structuring automatically.
 
-### Multi-Project Setup
+---
 
-Organize notebooks by project or domain:
+## Use Cases
 
-```
-Production Docs Notebook → APIs, deployment, monitoring
-Development Notebook → Local setup, debugging, testing
-Architecture Notebook → System design, patterns, decisions
-Legacy Code Notebook → Old systems, migration guides
-```
+### Legal Document Analysis
 
-### Notebook Switching Patterns
+Perfect for ensuring responses come only from case documents:
 
 ```
-"For this bug fix, use the Legacy Code notebook."
-"Switch to the Architecture notebook for this design discussion."
-"Use the Production Docs for deployment steps."
+"Compare the rulings in Case A vs Case B"
+→ Structured as comparison with source citations
+
+"Extract all clauses related to liability"
+→ Structured as extraction with document references
+
+"What does the contract say about termination?"
+→ Source-faithful answer or [NOT FOUND IN DOCUMENTS]
 ```
 
-### Metadata Best Practices
-
-When adding notebooks, provide rich metadata:
-```
-"Add this notebook with description: 'Complete React 18 documentation including hooks, performance, and migration guides' and tags: react, frontend, hooks, performance"
-```
-
-## Authentication Management
-
-### Account Rotation Strategy
-
-Free tier provides 50 queries/day per account. Maximize usage:
-
-1. **Primary account** → Main development work
-2. **Secondary account** → Testing and validation
-3. **Backup account** → Emergency queries when others are exhausted
+### Research & Literature Review
 
 ```
-"Switch to secondary account" → When approaching limit
-"Check health status" → Verify which account is active
+"What methodology did the authors use?"
+→ Direct quotes from methodology section
+
+"Summarize the key findings across all papers"
+→ Findings attributed to specific documents
+
+"What are the limitations mentioned?"
+→ Explicit list with source citations
 ```
 
-### Handling Auth Failures
-
-The agent can self-repair authentication:
+### Professional Fact-Checking
 
 ```
-"NotebookLM says I'm logged out—repair authentication"
-```
+"Does the document support the claim that X?"
+→ YES with quote, NO, or [NOT FOUND IN DOCUMENTS]
 
-This triggers: `get_health` → `setup_auth` → `get_health`
+"What evidence is provided for Y?"
+→ Listed evidence with source attribution
 
-## Advanced Configuration
-
-### Performance Optimization
-
-For faster interactions during development:
-```bash
-STEALTH_ENABLED=false  # Disable human-like typing
-TYPING_WPM_MAX=500     # Increase typing speed
-HEADLESS=false         # See what's happening
-```
-
-### Debugging Sessions
-
-Enable browser visibility to watch the live conversation:
-```
-"Research this issue and show me the browser"
-```
-
-Your agent automatically enables browser visibility for that research session.
-
-### Session Management
-
-Monitor active sessions:
-```
-"List all active NotebookLM sessions"
-"Close inactive sessions to free resources"
-"Reset the stuck session for notebook X"
-```
-
-## Complex Workflows
-
-### Multi-Stage Research
-
-For complex implementations requiring multiple knowledge sources:
-
-```
-Stage 1: "Research the API structure in the API notebook"
-Stage 2: "Switch to Architecture notebook and research the service patterns"
-Stage 3: "Use the Security notebook to research authentication requirements"
-Stage 4: "Synthesize all findings into implementation plan"
-```
-
-### Validation Workflow
-
-Cross-reference information across notebooks:
-
-```
-1. "In Production notebook, find the current API version"
-2. "Switch to Migration notebook, check compatibility notes"
-3. "Verify in Architecture notebook if this aligns with our patterns"
-```
-
-## Tool Integration Patterns
-
-### Direct Tool Calls
-
-For manual scripting, capture and reuse session IDs:
-
-```json
-// First call - capture session_id
-{
-  "tool": "ask_question",
-  "question": "What is the webhook structure?",
-  "notebook_id": "abc123"
-}
-
-// Follow-up - reuse session_id
-{
-  "tool": "ask_question",
-  "question": "Show me error handling examples",
-  "session_id": "captured_session_id_here"
-}
-```
-
-### Resource URIs
-
-Access library data programmatically:
-- `notebooklm://library` - Full library JSON
-- `notebooklm://library/{id}` - Specific notebook metadata
-
-## Best Practices
-
-### 1. **Context Preservation**
-- Always let the agent complete its research cycle
-- Don't interrupt between questions in a research session
-- Use descriptive notebook names for easy switching
-
-### 2. **Knowledge Base Quality**
-- Upload comprehensive documentation to NotebookLM
-- Merge related docs into single notebooks (up to 500k words)
-- Update notebooks when documentation changes
-
-### 3. **Error Recovery**
-- The server auto-recovers from browser crashes
-- Sessions rebuild automatically if context is lost
-- Profile corruption triggers automatic cleanup
-
-### 4. **Resource Management**
-- Close unused sessions to free memory
-- The server maintains max 10 concurrent sessions
-- Inactive sessions auto-close after 15 minutes
-
-### 5. **Security Considerations**
-- Use dedicated Google accounts for NotebookLM
-- Never share authentication profiles between projects
-- Backup `library.json` for important notebook collections
-
-## Troubleshooting Patterns
-
-### When NotebookLM returns incomplete answers
-```
-"The answer seems incomplete. Ask NotebookLM for more specific details about [topic]"
-```
-
-### When hitting rate limits
-```
-"We've hit the rate limit. Re-authenticate with the backup account"
-```
-
-### When browser seems stuck
-```
-"Reset all NotebookLM sessions and try again"
-```
-
-## Example Conversations
-
-### Complete Feature Implementation
-```
-User: "I need to implement a webhook system with retry logic"
-
-You: "Research webhook patterns with retry logic in NotebookLM first"
-Agent: [Researches comprehensively, asking 4-5 follow-up questions]
-Agent: "Based on my research, here's the implementation..."
-[Provides detailed code with patterns from NotebookLM]
-```
-
-### Architecture Decision
-```
-User: "Should we use microservices or monolith for this feature?"
-
-You: "Research our architecture patterns and decision criteria in the Architecture notebook"
-Agent: [Gathers context about existing patterns, scalability needs, team constraints]
-Agent: "According to our architecture guidelines..."
-[Provides recommendation based on documented patterns]
+"Are there any contradictions between documents?"
+→ Comparison analysis with specific citations
 ```
 
 ---
 
-Remember: The power of this integration lies in letting your agent **ask multiple questions** – gathering context and building comprehensive understanding before responding. Don't rush the research phase!
+## Question Types
+
+Claude automatically detects your question type and applies the appropriate structure:
+
+### Comparison Questions
+**Triggers**: "compare", "vs", "versus", "difference", "similarities"
+
+```
+"Compare approach A vs approach B in the documents"
+
+Output structure:
+- Elements being compared
+- Similarities (with sources)
+- Differences (with sources)
+- Synthesis
+```
+
+### List Questions
+**Triggers**: "list", "identify", "which", "what are the"
+
+```
+"List all the requirements mentioned"
+
+Output structure:
+1. Item - SOURCE: [document] - "quote"
+2. Item - SOURCE: [document] - "quote"
+...
+```
+
+### Analysis Questions
+**Triggers**: "analyze", "examine", "evaluate", "assess"
+
+```
+"Analyze the risk factors discussed"
+
+Output structure:
+- Subject of analysis
+- Observations (with evidence)
+- Evidence (direct quotes)
+- Conclusions (sourced)
+```
+
+### Explanation Questions
+**Triggers**: "explain", "why", "how does"
+
+```
+"Explain how the process works according to the manual"
+
+Output structure:
+- Concept identified
+- Explanation (sourced)
+- Examples from documents
+- Related information
+```
+
+### Extraction Questions
+**Default for all other questions**
+
+```
+"What is the deadline mentioned?"
+
+Output structure:
+- Data point
+- SOURCE: [document/section]
+- QUOTE: "exact text"
+```
+
+---
+
+## Language Support
+
+The structured fork works with **any language Claude supports**.
+
+**Tested**: Italian - works perfectly with Italian users and documents.
+
+**How it works**:
+1. Claude detects your language from context
+2. Structuring instructions adapt to your language
+3. NotebookLM responds in the same language
+4. No configuration needed
+
+**Other languages**: Should work automatically. If you use a language other than Italian, please share feedback on GitHub!
+
+---
+
+## Best Practices
+
+### 1. Ask Specific Questions
+More specific questions → better structured responses
+
+```
+❌ "Tell me about the project"
+✅ "What are the project milestones and their deadlines?"
+```
+
+### 2. Trust the `[NOT FOUND]` Response
+When you see `[NOT FOUND IN DOCUMENTS]`, it means:
+- The information genuinely isn't in your documents
+- Source fidelity is working correctly
+- NotebookLM isn't making things up
+
+### 3. Use Multiple Questions for Complex Topics
+```
+1. "What does document A say about X?"
+2. "What does document B say about X?"
+3. "Are there contradictions between the two?"
+```
+
+### 4. Session Management
+- Same `session_id` maintains context across questions
+- Sessions auto-cleanup after 15 minutes
+- Use `reset_session` to start fresh
+
+---
+
+## Authentication
+
+### Automatic Connection Verification
+
+This fork automatically checks authentication before operations:
+
+1. You ask a question
+2. Server verifies NotebookLM connection
+3. If expired/missing:
+   - Chrome running → Message to close Chrome
+   - Chrome closed → Auto-opens login browser
+4. After login, original request proceeds
+
+**No manual intervention needed** in most cases.
+
+### Manual Authentication
+
+```
+"Check NotebookLM health"     → get_health
+"Setup NotebookLM auth"       → setup_auth (opens browser)
+"Switch NotebookLM account"   → re_auth (clears and re-authenticates)
+```
+
+### Rate Limits
+- Free accounts: 50 queries/day
+- Google AI Pro/Ultra: 5x higher limits
+- Use `re_auth` to switch accounts when limit reached
+
+---
+
+## Notebook Management
+
+### Add Notebooks
+```
+"Add this NotebookLM notebook: [URL]"
+```
+
+### Switch Notebooks
+```
+"Use the Legal Docs notebook"
+"Switch to Research Papers notebook"
+```
+
+### Organize with Metadata
+```
+"Add notebook with description 'Contract analysis Q4 2024'
+ and tags: legal, contracts, Q4"
+```
+
+---
+
+## Example Workflow
+
+### Legal Research Session
+
+```
+1. "Add the Case Law notebook: [URL]"
+2. "What does Smith v. Jones say about negligence?"
+   → Structured response with citations
+3. "Compare that with the ruling in Brown v. Davis"
+   → Comparison with sources from both cases
+4. "Are there any contradictions?"
+   → Analysis with specific page references
+5. "Extract all mentions of 'duty of care'"
+   → List with direct quotes and sources
+```
+
+### Research Literature Review
+
+```
+1. "Select the Literature Review notebook"
+2. "What methodology did each study use?"
+   → Structured list per study
+3. "What are the main findings across all papers?"
+   → Findings attributed to specific papers
+4. "What limitations are mentioned?"
+   → Source-faithful list
+5. "Are there gaps in the research?"
+   → Analysis based only on what papers state
+```
+
+---
+
+## Troubleshooting
+
+### NotebookLM Timeout
+- Never use decorative lines (`===` or `---`) in custom prompts
+- This fork handles this automatically
+
+### Responses Include External Knowledge
+- Verify you're using `ask_question` tool
+- Check that structuring hasn't been accidentally disabled
+
+### Missing Citations
+- Ask more specific questions
+- General questions may produce less structured responses
+
+See [Troubleshooting Guide](troubleshooting.md) for more.
+
+---
+
+## Credits
+
+- Original `notebooklm-mcp`: [Gérôme Dexheimer](https://github.com/PleasePrompto/notebooklm-mcp)
+- Client-side structuring approach: Paolo Dalprato
