@@ -26,6 +26,32 @@ The MCP tool description includes comprehensive guidelines that instruct Claude 
 4. NotebookLM receives the structured prompt and responds accordingly
 5. Claude presents the response faithfully without adding external knowledge
 
+**Why This Matters:**
+
+NotebookLM already provides source fidelity by design (Gemini grounded on documents). **The real problem this fork solves is different:** preventing Claude from "improving" NotebookLM's responses with external knowledge when presenting them to the user.
+
+```
+┌─────────────────────────────────────────────────────┐
+│ Without structuring (original MCP):                 │
+│ • NotebookLM: "Document states X [Source: doc.pdf]"│
+│ • Claude presents: "Document states X. Also, based │
+│   on my knowledge, Y is important to consider..."  │
+│   └─ External knowledge added! ─┘                  │
+│                                                     │
+│ With structuring (this fork):                       │
+│ • NotebookLM: "Document states X [Source: doc.pdf]"│
+│ • Claude reads Response Handling instruction        │
+│ • Claude presents: "Document states X [Source]"    │
+│   └─ Faithful presentation, no additions ─┘        │
+└─────────────────────────────────────────────────────┘
+```
+
+The structuring guidelines include **two critical instruction phases**:
+1. **Pre-send**: Transform questions with explicit constraints (but preserve original wording)
+2. **Post-receive**: Instruct Claude to present responses faithfully WITHOUT external knowledge
+
+This dual-phase approach ensures complete document fidelity throughout the entire workflow.
+
 **Example Transformation:**
 
 Simple question:
@@ -65,17 +91,27 @@ BEGIN STRUCTURED RESPONSE
 
 ### Language Support
 
-**Tested with Italian** - works perfectly with Italian users and documents.
-
-**Other languages**: The system adapts to the user's language (detected from user profile/context). If you use notebooklm-mcp-structured with a language other than Italian, please share your experience!
+**Adapts naturally to your language** - The fork works in any language Claude supports, with no configuration needed.
 
 **How it works:**
-- Claude detects your language from your profile/context
-- Structuring instructions are translated to your language
-- NotebookLM responds in the same language
-- No configuration needed
 
-**Seeking testers**: If you use languages other than Italian, we'd love to hear if it works well for you. Please open an issue on GitHub with your feedback!
+Claude uses your **user context** to automatically adapt the structuring instructions to your language:
+- Interface language (Claude Desktop settings)
+- Conversation history and patterns
+- User profile and preferences
+- CLAUDE.md configuration (if present)
+
+When you ask a question, Claude:
+1. Reads the structuring guidelines (language-agnostic templates)
+2. Automatically translates instructions to match your context
+3. Sends the structured prompt to NotebookLM in your language
+4. Presents the response faithfully in the same language
+
+**Example:** An Italian user with Italian Claude Desktop configuration asking "Analizza i documenti" will automatically get Italian-structured prompts ("ISTRUZIONI PER LA RISPOSTA..."). A French user will get French-structured prompts ("INSTRUCTIONS DE RÉPONSE..."). No server-side language detection needed.
+
+**Tested with Italian** - works perfectly.
+
+**Other languages**: Designed to work with any language Claude supports. If you use it in other languages, we'd love to hear your feedback!
 
 ### Automatic Connection Verification
 
