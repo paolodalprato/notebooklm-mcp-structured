@@ -56,6 +56,26 @@ The structuring guidelines include **two critical instruction phases**:
 
 This dual-phase approach is designed to maintain document fidelity throughout the workflow.
 
+### Verification & Transparency
+
+**How to verify the workflow:**
+
+Since NotebookLM saves chat history in your notebooks, you can verify the entire process:
+
+1. **Ask a question** through Claude using this MCP
+2. **Open your notebook** on the NotebookLM web interface (https://notebooklm.google.com)
+3. **View the saved chat** to see:
+   - The **structured prompt** that Claude sent (via the MCP)
+   - The **original NotebookLM response** with all internal reference links
+
+**What you can verify:**
+- That structuring was applied correctly to your question
+- The raw NotebookLM response before Claude presents it
+- How Claude interpreted the Response Handling instructions
+- Which language was used for structured prompts (useful for multilingual testing)
+
+This transparency mechanism lets you empirically verify the client-side structuring approach and understand each phase of the workflow.
+
 **Example Transformation:**
 
 Simple question:
