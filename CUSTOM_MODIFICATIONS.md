@@ -273,180 +273,151 @@ WITHOUT adding external knowledge or "improvements".
 
 ---
 
-## 🌍 Multilingual Support Architecture
+## 🌍 Multilingual Support: Technical Analysis
 
-### How Language Adaptation Works
+### Verified Facts vs Speculation
 
-One of the key advantages of the **client-side structuring approach** is natural multilingual support without server-side language detection or template management.
-
-#### **Original MCP: No Explicit Language Handling**
-
-The original MCP is language-agnostic in the sense that it simply passes questions through:
-- No language detection
-- No translation logic
-- No language-specific templates
-- Works in any language NotebookLM supports (relies on NotebookLM's multilingual capabilities)
-
-**Limitation:** If the tool description included language-specific instructions, they would be in one fixed language (e.g., English), requiring all users to understand that language regardless of their own language preference.
+This section documents what we **know for certain** about multilingual behavior, distinguishing facts from assumptions.
 
 ---
 
-#### **Structured Fork: Claude User Context Adaptation**
+### ✅ What We Know For Certain (Code-Verified)
 
-This fork leverages **Claude's inherent ability to adapt to user context** for intelligent language handling.
+#### **No Server-Side Language Detection**
 
-**How It Works:**
+Verified by code inspection:
+- ❌ No language detection logic in MCP server code
+- ❌ No language-specific templates
+- ❌ No translation logic
+- ❌ No locale detection or configuration
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│ CLAUDE USER CONTEXT (automatically detected)                │
-├─────────────────────────────────────────────────────────────┤
-│ 1. Claude Desktop interface language                        │
-│ 2. User's CLAUDE.md configuration (style rules, language)   │
-│ 3. Conversation history (predominant language used)         │
-│ 4. User profile implicit signals                            │
-└─────────────────────────────────────────────────────────────┘
-                            ↓
-              Claude reads Structuring Guidelines
-              (language-agnostic templates in tool description)
-                            ↓
-         Automatically translates to user's context language
-                            ↓
-              Structured prompt sent to NotebookLM
-```
+**Evidence:** Search through all `.ts` files shows zero language detection implementation.
 
-**Example Flow - Italian User:**
+---
 
-```
-User context detected:
-├── Desktop: Italian
-├── CLAUDE.md: Italian style rules
-├── Conversation: Predominantly Italian
-└── → Claude defaults to Italian
+#### **Client-Side Instruction Mechanism**
 
-User asks: "Analizza le sentenze"
+The tool description (`src/tools/definitions/ask-question.ts`) contains:
 
-Claude reads guidelines and adapts:
-ISTRUZIONI PER LA RISPOSTA          ← Translated to Italian
-COMPITO: Analizza le sentenze       ← Original wording preserved
-VINCOLI OPERATIVI                   ← Headers translated
-- Usa ESCLUSIVAMENTE informazioni...← Constraints translated
+```typescript
+**How to Structure (adapt to user's language):**
+...
+- Translate these instructions to match the user's language
 ```
 
-**Example Flow - French User:**
+**This is a textual instruction to Claude**, not executable code. How Claude interprets "adapt to user's language" is not controlled by the MCP server.
+
+---
+
+### 🔬 Observed Behavior (Empirical Testing)
+
+#### **Italian User Testing (Verified):**
+
+**Test Case 1: Italian question, Italian context**
+- User asks in Italian: "Analizza i documenti"
+- Result: ✅ Structured prompt in Italian
+- Result: ✅ Response in Italian
+- **Status: Reliable**
+
+**Test Case 2: English question, Italian context**
+- User asks in English: "What are the findings?"
+- Result: ⚠️ **Inconsistent behavior observed**
+  - Sometimes structures in English
+  - Sometimes structures in Italian
+  - Final response often in Italian regardless
+- **Status: Non-deterministic**
+
+---
+
+### 🤔 What We DON'T Know (Honest Limitations)
+
+We **cannot definitively state** how Claude decides which language to use when applying "adapt to user's language" because:
+
+1. **Claude's internal decision process is not documented** in MCP specifications
+2. **Empirical testing shows non-deterministic behavior** in mixed-language contexts
+3. **Multiple factors may influence** the decision (but we can only speculate which)
+
+**We avoid making claims about:**
+- ❌ "Claude looks at user context X, Y, Z" ← Speculation
+- ❌ "Claude always uses the language of the question" ← Contradicted by testing
+- ❌ "It works this specific way..." ← Cannot verify
+
+---
+
+### 📊 Architectural Comparison: Server-Side vs Client-Side
+
+#### **Server-Side Template Approach (Not Used):**
 
 ```
-User context detected:
-├── Desktop: French
-├── CLAUDE.md: French or none
-├── Conversation: Predominantly French
-└── → Claude defaults to French
+Pros:
+✅ Deterministic language selection
+✅ Explicit control over output
+✅ Predictable behavior
 
-User asks: "Analysez les jugements"
+Cons:
+❌ Requires language detection implementation
+❌ Must maintain templates for each language
+❌ Limited to pre-defined languages
+❌ More complex server-side logic
+```
 
-Claude reads guidelines and adapts:
-INSTRUCTIONS DE RÉPONSE             ← Translated to French
-TÂCHE: Analysez les jugements       ← Original wording preserved
-CONTRAINTES OPÉRATIONNELLES         ← Headers translated
-- Utiliser UNIQUEMENT les informations...← Constraints translated
+#### **Client-Side Instruction Approach (This Fork):**
+
+```
+Pros:
+✅ Zero server-side complexity
+✅ No template maintenance
+✅ Potential support for any language Claude understands
+✅ Simpler architecture
+
+Cons:
+⚠️ Non-deterministic language selection in mixed contexts
+⚠️ Behavior depends on Claude's interpretation
+⚠️ Less control over exact output language
 ```
 
 ---
 
-### 🎯 Why This Approach Is Superior
+### 💡 Honest Assessment
 
-| Aspect | Server-Side Templates | Client-Side Adaptation (This Fork) |
-|--------|----------------------|-----------------------------------|
-| **Language support** | Fixed set (e.g., EN, IT) | Any language Claude supports |
-| **Maintenance** | Templates for each language | Single set of language-agnostic guidelines |
-| **Detection logic** | Server must detect/infer language | Claude uses native user context |
-| **Flexibility** | Rigid templates | Claude adapts based on context |
-| **Edge cases** | Must handle explicitly | Claude handles naturally |
-| **Updates** | Must update all templates | Update once, works for all languages |
+**What the fork achieves:**
+- ✅ Eliminates server-side language detection complexity
+- ✅ Avoids maintaining multiple language templates
+- ✅ Works reliably for single-language usage (tested with Italian)
 
-**Key Insight:** By embedding language-agnostic structuring guidelines in the tool description and letting Claude adapt them, the fork gets multilingual support "for free" without any server-side complexity.
+**What remains unclear:**
+- ⚠️ Exact behavior in multilingual contexts
+- ⚠️ Which factors influence Claude's language decision
+- ⚠️ Consistency across different language combinations
 
----
-
-### 📝 Technical Note: Multilingual Users
-
-**Observed Behavior:**
-
-Users with a **strongly localized Claude configuration** (e.g., Italian interface + Italian CLAUDE.md + Italian conversation history) may find that Claude prefers to structure prompts in their primary language even when asking questions in a different language.
-
-**Example:**
-- User context: Strongly Italian
-- User asks in English: "What are the main findings?"
-- Claude may structure with Italian headers: "ISTRUZIONI PER LA RISPOSTA..."
-
-**Why This Happens:**
-
-This is not a limitation of the fork, but **Claude's natural behavior** based on user context. Claude interprets the structuring guidelines through the lens of the user's predominant language.
-
-**Is This a Problem?**
-
-For most users (single-language or language-consistent usage): ✅ No, it's a feature - automatic adaptation.
-
-For multilingual users (want to force a different language): This is expected behavior based on how Claude weighs user context signals.
-
-**Architectural Decision:**
-
-The fork intentionally relies on Claude's user context rather than implementing server-side language detection because:
-1. Simpler architecture (no language detection logic)
-2. More flexible (adapts to any language)
-3. Future-proof (benefits from Claude's improvements in context awareness)
-4. Consistent with MCP philosophy (client-side intelligence)
+**Recommendation for users:**
+- For best results, **use a consistent language** throughout the conversation with Claude
+- The system works most reliably when question language, conversation context, and interface language align
+- Multilingual users may experience variable behavior
 
 ---
 
-### 🔄 Comparison: Language Handling Architectures
+### 🔄 Why Client-Side Still Makes Sense
 
-#### **If This Fork Used Server-Side Templates (Not Chosen):**
+Despite the non-deterministic aspects, the architectural decision to use client-side instructions remains valid because:
 
-```
-User question → MCP Server detects language → Select template (IT/EN/FR/...)
-                     ↓
-              Template not found for user's language?
-                     ↓
-              Fallback to English? Error?
-```
+1. **Simplicity**: Zero server-side language logic to maintain
+2. **Flexibility**: Can potentially work with any language without code changes
+3. **Maintainability**: Single set of guidelines, not N templates
+4. **Consistency with MCP philosophy**: Leverage client capabilities rather than reimplementing them
 
-**Problems:**
-- Limited to pre-defined languages
-- Requires language detection logic
-- Must maintain N templates (one per language)
-- What about regional variations? (PT-BR vs PT-PT, ES-ES vs ES-MX)
-
-#### **This Fork's Approach (Client-Side Adaptation):**
-
-```
-User question → Claude reads language-agnostic guidelines
-                     ↓
-              Claude uses user context to adapt
-                     ↓
-              Works for ANY language Claude supports
-```
-
-**Advantages:**
-- Zero server-side logic
-- Infinite language support (limited only by Claude's capabilities)
-- No template maintenance
-- Natural handling of regional variations
+The trade-off is **predictability** (less) for **simplicity** (more).
 
 ---
 
-### 💡 Summary: Multilingual Support as Architectural Advantage
+### 📝 Documentation Philosophy
 
-**The fork's multilingual support is not a separate feature** - it's a **natural consequence of the client-side structuring architecture**.
-
-By embedding guidelines in the tool description and letting Claude interpret them through user context, the fork achieves:
-- ✅ Universal language support
-- ✅ Zero configuration
-- ✅ No server-side complexity
-- ✅ Automatic adaptation
-- ✅ Future-proof design
-
-This is a **key differentiator** from server-side approaches and demonstrates the power of leveraging Claude's native capabilities rather than reimplementing them on the server.
+This section intentionally:
+- ✅ Documents only verified facts
+- ✅ Clearly labels speculation as such
+- ✅ Acknowledges limitations and unknowns
+- ✅ Reports empirical observations honestly
+- ❌ Avoids making unverifiable claims about Claude's behavior
 
 ### Code References
 

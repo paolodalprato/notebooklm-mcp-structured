@@ -91,27 +91,26 @@ BEGIN STRUCTURED RESPONSE
 
 ### Language Support
 
-**Adapts naturally to your language** - The fork works in any language Claude supports, with no configuration needed.
+**Multilingual by design** - The fork works with multiple languages without requiring server-side configuration.
 
 **How it works:**
 
-Claude uses your **user context** to automatically adapt the structuring instructions to your language:
-- Interface language (Claude Desktop settings)
-- Conversation history and patterns
-- User profile and preferences
-- CLAUDE.md configuration (if present)
+The structuring guidelines in the tool description instruct Claude to "adapt to user's language". Claude interprets these instructions and applies them based on the conversational context.
 
-When you ask a question, Claude:
-1. Reads the structuring guidelines (language-agnostic templates)
-2. Automatically translates instructions to match your context
-3. Sends the structured prompt to NotebookLM in your language
-4. Presents the response faithfully in the same language
+**What we know for certain:**
+- ✅ No server-side language detection in the MCP code
+- ✅ No language-specific templates to maintain
+- ✅ Tested successfully with Italian users and documents
+- ✅ The approach is language-agnostic by design
 
-**Example:** An Italian user with Italian Claude Desktop configuration asking "Analizza i documenti" will automatically get Italian-structured prompts ("ISTRUZIONI PER LA RISPOSTA..."). A French user will get French-structured prompts ("INSTRUCTIONS DE RÉPONSE..."). No server-side language detection needed.
+**Expected behavior:**
+- The system works best when using a consistent language throughout the conversation
+- Claude interprets the structuring guidelines contextually
+- Results may vary based on conversational context
 
-**Tested with Italian** - works perfectly.
+**Tested with Italian** - works reliably with Italian users asking questions in Italian.
 
-**Other languages**: Designed to work with any language Claude supports. If you use it in other languages, we'd love to hear your feedback!
+**Other languages**: The architecture supports any language Claude can work with. If you use it in other languages, please share your experience to help us understand the behavior patterns!
 
 ### Automatic Connection Verification
 
