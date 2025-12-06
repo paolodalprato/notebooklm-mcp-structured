@@ -108,63 +108,11 @@ The tool description is the perfect place for structuring instructions because:
 3. No additional API surface needed
 4. Updates don't require protocol changes
 
-### Why No Decorative Lines?
-
-NotebookLM interprets lines of `=` or `-` characters as invalid formatting, causing the system to timeout. Using plain text headers avoids this issue entirely.
-
-## Request Workflow Architecture
-
-This section explains the complete flow of a request through the system, showing what happens at each stage and what instructions Claude receives.
-
-### Workflow Diagram
-
-```mermaid
-sequenceDiagram
-    participant U as 👤 User
-    participant C as 🤖 Claude
-    participant TD as 📋 Tool Description
-    participant MCP as ⚙️ MCP Server
-    participant NLM as 📚 NotebookLM<br/>(Gemini)
-
-    Note over U,NLM: PHASE 1: PRE-SEND (Client-Side Structuring)
-    U->>C: Simple question<br/>"Analyze the rulings in the documents"
-    C->>TD: Reads tool description
-    TD-->>C: Returns Structuring Guidelines<br/>+ Response Handling instructions
-    Note over C: Transforms simple question<br/>into structured prompt<br/>(constraints, citations, missing info)
-
-    Note over U,NLM: PHASE 2: MCP TRANSIT
-    C->>MCP: Structured prompt<br/>(with operational constraints)
-    Note over MCP: Passes question<br/>WITHOUT modifications
-    MCP->>NLM: Structured prompt
-    Note over NLM: Gemini processes<br/>against documents
-
-    Note over U,NLM: PHASE 3: RETURN FLOW
-    NLM-->>MCP: Response from documents
-    Note over MCP: Adds FOLLOW_UP_REMINDER<br/>("Need more info?")
-    MCP-->>C: Response + Reminder
-    Note over C: Applies "Response Handling"<br/>(instructions read in Phase 1)<br/>= presents faithfully
-    C-->>U: Source-faithful response<br/>with citations
-```
-
-### What Happens at Each Phase
-
-| Phase | Actor | Action | Content Added/Read |
-|-------|-------|--------|-------------------|
-| **1a** | Claude | Reads tool description | **Structuring Guidelines**: how to transform the question |
-| **1b** | Claude | Reads tool description | **Response Handling**: how to present the response |
-| **1c** | Claude | Transforms question | Adds operational constraints, citation requirements, missing info handling |
-| **2** | MCP Server | Transits question | *No modifications* - passes structured prompt as-is |
-| **3a** | MCP Server | Modifies response | **FOLLOW_UP_REMINDER**: prompts Claude to check if more questions needed |
-| **3b** | Claude | Presents response | Applies Response Handling (source fidelity) read in Phase 1 |
-
-### Key Architectural Insight
-
-The MCP server does **not** add constraints on source fidelity *after* receiving the response. The fidelity instructions are read by Claude *before* sending the question, in the tool description. The server only adds an operational reminder ("do you need more information?"), not a behavioral constraint.
-
-This architecture relies on Claude's ability to follow instructions read in advance, not on post-hoc technical controls. The structuring happens client-side (in Claude), making the system simpler, more flexible, and naturally multilingual.
-
 ### Code References
 
+For the complete request workflow diagram and architectural explanation, see the [Architecture section in README.md](README.md#architecture).
+
+Implementation details:
 - **Structuring Guidelines**: `src/tools/definitions/ask-question.ts` (lines 12-125)
 - **Response Handling instruction**: `src/tools/definitions/ask-question.ts` (lines 123-124)
 - **FOLLOW_UP_REMINDER**: `src/tools/handlers.ts` (lines 22-23, applied at line 247)
