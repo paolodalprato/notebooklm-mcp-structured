@@ -108,6 +108,8 @@ The structuring guidelines in the tool description instruct Claude to "adapt to 
 - Claude interprets the structuring guidelines contextually
 - Results may vary based on conversational context
 
+**Important:** Using a language different from your Claude account/profile language may produce unpredictable structuring results. For consistent behavior, use your account's primary language throughout the conversation.
+
 **Tested with Italian** - works reliably with Italian users asking questions in Italian.
 
 **Other languages**: The architecture supports any language Claude can work with. If you use it in other languages, please share your experience to help us understand the behavior patterns!

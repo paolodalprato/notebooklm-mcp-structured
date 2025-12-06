@@ -392,8 +392,8 @@ Cons:
 
 **Recommendation for users:**
 - For best results, **use a consistent language** throughout the conversation with Claude
+- **Important:** Using a language different from your Claude account/profile language may produce unpredictable structuring results
 - The system works most reliably when question language, conversation context, and interface language align
-- Multilingual users may experience variable behavior
 
 ---
 
