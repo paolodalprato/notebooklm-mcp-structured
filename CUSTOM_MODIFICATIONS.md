@@ -114,6 +114,8 @@ The tool description is the perfect place for structuring instructions because:
 
 **Important Insight:** NotebookLM already provides source fidelity by design (Gemini grounded on documents). The structuring approach solves a **different problem**: preventing Claude from "improving" responses with external knowledge.
 
+**Design Intent:**
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │ THE REAL RISK (why this fork exists)                        │
@@ -123,18 +125,20 @@ The tool description is the perfect place for structuring instructions because:
 │                        ↓                                    │
 │                     Claude → User                           │
 │                        ↑                                    │
-│              RISK: Claude adds context here                 │
+│              RISK: Claude may add context here              │
 │                                                             │
 │  Example WITHOUT structuring:                               │
 │  • NLM returns: "Document X states Y [Source: doc.pdf]"    │
-│  • Claude presents: "Document X states Y. Additionally,    │
-│    it's important to note that Z..."                       │
+│  • Risk: Claude may add external knowledge                 │
+│    "Document X states Y. Additionally, it's important      │
+│    to note that Z..."                                      │
 │         └─ external knowledge added! ─┘                    │
 │                                                             │
 │  Example WITH structuring (this fork):                      │
 │  • NLM returns: "Document X states Y [Source: doc.pdf]"    │
 │  • Claude reads Response Handling instruction               │
-│  • Claude presents: "Document X states Y [Source: doc.pdf]"│
+│  • Goal: Claude presents faithfully                         │
+│    "Document X states Y [Source: doc.pdf]"                 │
 │         └─ faithful presentation, no additions ─┘          │
 │                                                             │
 └─────────────────────────────────────────────────────────────┘
@@ -194,8 +198,8 @@ sequenceDiagram
     Note over MCP: Adds FOLLOW_UP_REMINDER
     MCP-->>C: Response + reminder
 
-    Note over C: PHASE 2: Response Handling<br/>Presents faithfully<br/>NO external knowledge
-    C-->>U: Source-faithful response
+    Note over C: PHASE 2: Response Handling<br/>Instructed to present faithfully<br/>Avoid adding external knowledge
+    C-->>U: Response (with fidelity instructions)
 ```
 
 **Characteristics:**
@@ -250,11 +254,13 @@ WITHOUT adding external knowledge or "improvements".
 
 **Why this matters:**
 
+**Design Intent Comparison:**
+
 | Without Response Handling | With Response Handling (this fork) |
 |---------------------------|-----------------------------------|
 | NLM: "Document states X [Source]" | NLM: "Document states X [Source]" |
-| Claude: "Document states X. Also, based on my knowledge, Y is related..." | Claude: "Document states X [Source]" |
-| ❌ Mixed sources, unclear attribution | ✅ Pure document fidelity |
+| Risk: Claude may add external knowledge<br/>"Also, based on my knowledge, Y..." | Goal: Claude presents faithfully<br/>"Document states X [Source]" |
+| ❌ Mixed sources, unclear attribution | ✅ Intended: Pure document fidelity |
 
 **This is the innovation that distinguishes the fork:** NotebookLM is already grounded, but Claude's presentation layer needed explicit fidelity instructions.
 
@@ -265,7 +271,7 @@ WITHOUT adding external knowledge or "improvements".
 | Aspect | Original MCP | Structured Fork |
 |--------|--------------|-----------------|
 | **Question transformation** | Free rephrasing | Structured with constraints, original wording preserved |
-| **Response presentation** | May add context/interpretation | **Must present faithfully** (explicit instruction) |
+| **Response presentation** | May add context/interpretation | **Instructed to present faithfully** (explicit instruction) |
 | **Source fidelity target** | NotebookLM (implicit) | **Claude's presentation layer** (explicit) |
 | **Critical innovation** | Simple passthrough | Dual-phase instruction (pre-send + post-receive) |
 

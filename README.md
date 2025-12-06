@@ -24,24 +24,28 @@ The MCP tool description includes comprehensive guidelines that instruct Claude 
 2. Claude reads the structuring guidelines from the tool description
 3. Claude transforms the question into a well-structured prompt
 4. NotebookLM receives the structured prompt and responds accordingly
-5. Claude presents the response faithfully without adding external knowledge
+5. Claude is instructed to present the response faithfully without adding external knowledge
 
 **Why This Matters:**
 
 NotebookLM already provides source fidelity by design (Gemini grounded on documents). **The real problem this fork solves is different:** preventing Claude from "improving" NotebookLM's responses with external knowledge when presenting them to the user.
 
+**Design Intent (what the fork aims to achieve):**
+
 ```
 ┌─────────────────────────────────────────────────────┐
 │ Without structuring (original MCP):                 │
 │ • NotebookLM: "Document states X [Source: doc.pdf]"│
-│ • Claude presents: "Document states X. Also, based │
-│   on my knowledge, Y is important to consider..."  │
+│ • Risk: Claude may add external knowledge          │
+│   "Document states X. Also, based on my knowledge, │
+│   Y is important to consider..."                   │
 │   └─ External knowledge added! ─┘                  │
 │                                                     │
 │ With structuring (this fork):                       │
 │ • NotebookLM: "Document states X [Source: doc.pdf]"│
 │ • Claude reads Response Handling instruction        │
-│ • Claude presents: "Document states X [Source]"    │
+│ • Goal: Claude presents faithfully                  │
+│   "Document states X [Source]"                     │
 │   └─ Faithful presentation, no additions ─┘        │
 └─────────────────────────────────────────────────────┘
 ```
@@ -50,7 +54,7 @@ The structuring guidelines include **two critical instruction phases**:
 1. **Pre-send**: Transform questions with explicit constraints (but preserve original wording)
 2. **Post-receive**: Instruct Claude to present responses faithfully WITHOUT external knowledge
 
-This dual-phase approach ensures complete document fidelity throughout the entire workflow.
+This dual-phase approach is designed to maintain document fidelity throughout the workflow.
 
 **Example Transformation:**
 
