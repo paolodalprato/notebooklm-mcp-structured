@@ -80,7 +80,8 @@ class NotebookLMMCPServer {
           tools: {},
           resources: {},
           resourceTemplates: {},
-          prompts: {}, // Required for completion/complete support in some clients
+          prompts: {},
+          completions: {}, // Required for completion/complete support
           logging: {},
         },
       }
