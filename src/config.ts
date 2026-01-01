@@ -76,6 +76,18 @@ export interface Config {
   cleanupInstancesOnShutdown: boolean;
   instanceProfileTtlHours: number;
   instanceProfileMaxCount: number;
+
+  // Timing constants for browser operations
+  navigationDelayMinMs: number;
+  navigationDelayMaxMs: number;
+  chatInputTimeoutMs: number;
+  chatInputFallbackTimeoutMs: number;
+  preSubmitDelayMinMs: number;
+  preSubmitDelayMaxMs: number;
+  postSubmitDelayMinMs: number;
+  postSubmitDelayMaxMs: number;
+  responseTimeoutMs: number;
+  requiredStablePolls: number;
 }
 
 /**
@@ -130,6 +142,18 @@ const DEFAULTS: Config = {
   cleanupInstancesOnShutdown: true,
   instanceProfileTtlHours: 72,
   instanceProfileMaxCount: 20,
+
+  // Timing constants for browser operations
+  navigationDelayMinMs: 2000,
+  navigationDelayMaxMs: 3000,
+  chatInputTimeoutMs: 10000,
+  chatInputFallbackTimeoutMs: 5000,
+  preSubmitDelayMinMs: 500,
+  preSubmitDelayMaxMs: 1000,
+  postSubmitDelayMinMs: 1000,
+  postSubmitDelayMaxMs: 1500,
+  responseTimeoutMs: 120000, // 2 minutes
+  requiredStablePolls: 3,
 };
 
 

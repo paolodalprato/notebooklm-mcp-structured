@@ -168,16 +168,16 @@ export class ConnectionChecker {
         message: "Authentication required but Chrome is running",
         requiresUserAction: true,
         userActionMessage:
-          "⚠️ **Autenticazione NotebookLM richiesta**\n\n" +
-          "Per poter procedere, devi prima **chiudere completamente Chrome** " +
-          "(tutte le finestre).\n\n" +
-          "Questo è necessario perché l'autenticazione richiede l'accesso esclusivo " +
-          "al profilo Chrome.\n\n" +
-          "**Cosa fare:**\n" +
-          "1. Chiudi tutte le finestre di Chrome\n" +
-          "2. Conferma qui quando hai finito\n" +
-          "3. Si aprirà una finestra per il login a Google\n\n" +
-          "⏱️ Timeout: 1 minuto",
+          "⚠️ **NotebookLM Authentication Required**\n\n" +
+          "To proceed, you must first **close Chrome completely** " +
+          "(all windows).\n\n" +
+          "This is necessary because authentication requires exclusive access " +
+          "to the Chrome profile.\n\n" +
+          "**What to do:**\n" +
+          "1. Close all Chrome windows\n" +
+          "2. Confirm here when done\n" +
+          "3. A window will open for Google login\n\n" +
+          "⏱️ Timeout: 1 minute",
         canAutoAuth: false,
       };
     }

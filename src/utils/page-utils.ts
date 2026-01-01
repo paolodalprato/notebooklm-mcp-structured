@@ -11,31 +11,16 @@
  */
 
 import type { Page } from "patchright";
+import { CONFIG } from "../config.js";
+import {
+  RESPONSE_CONTAINER_PRIMARY,
+  RESPONSE_TEXT_CONTENT,
+  RESPONSE_SELECTORS,
+  THINKING_INDICATOR,
+  JS_EVAL_SELECTORS,
+  JS_CONTAINER_SELECTOR,
+} from "../selectors.js";
 import { log } from "./logger.js";
-
-// ============================================================================
-// Constants
-// ============================================================================
-
-/**
- * CSS selectors to find assistant response elements
- * Ordered by priority (most specific first)
- */
-const RESPONSE_SELECTORS = [
-  ".to-user-container .message-text-content",
-  "[data-message-author='bot']",
-  "[data-message-author='assistant']",
-  "[data-message-role='assistant']",
-  "[data-author='assistant']",
-  "[data-renderer*='assistant']",
-  "[data-automation-id='response-text']",
-  "[data-automation-id='assistant-response']",
-  "[data-automation-id='chat-response']",
-  "[data-testid*='assistant']",
-  "[data-testid*='response']",
-  "[aria-live='polite']",
-  "[role='listitem'][data-message-author]",
-];
 
 
 // ============================================================================
@@ -43,7 +28,22 @@ const RESPONSE_SELECTORS = [
 // ============================================================================
 
 /**
- * Simple string hash function (for efficient comparison)
+ * Simple 32-bit string hash function (djb2 variant) for efficient comparison.
+ *
+ * Used to quickly identify already-seen response texts without storing
+ * the full text content. This is a performance optimization for the
+ * polling loop in waitForLatestAnswer().
+ *
+ * LIMITATIONS:
+ * - 32-bit hash means possible collisions (~1 in 4 billion)
+ * - For very long texts with similar prefixes, collision risk increases
+ * - Not cryptographically secure - DO NOT use for security purposes
+ *
+ * For the current use case (comparing ~10-50 response texts per session),
+ * collision probability is negligible (<0.00001%).
+ *
+ * @param str - The string to hash
+ * @returns 32-bit integer hash
  */
 function hashString(str: string): number {
   let hash = 0;
@@ -74,14 +74,13 @@ export async function snapshotLatestResponse(page: Page): Promise<string | null>
  */
 export async function snapshotAllResponses(page: Page): Promise<string[]> {
   const allTexts: string[] = [];
-  const primarySelector = ".to-user-container";
 
   try {
-    const containers = await page.$$(primarySelector);
+    const containers = await page.$$(RESPONSE_CONTAINER_PRIMARY);
     if (containers.length > 0) {
       for (const container of containers) {
         try {
-          const textElement = await container.$(".message-text-content");
+          const textElement = await container.$(RESPONSE_TEXT_CONTENT);
           if (textElement) {
             const text = await textElement.innerText();
             if (text && text.trim()) {
@@ -185,14 +184,14 @@ export async function waitForLatestAnswer(
   let pollCount = 0;
   let lastCandidate: string | null = null;
   let stableCount = 0; // Track how many times we see the same text
-  const requiredStablePolls = 3; // Text must be stable for 3 consecutive polls
+  const requiredStablePolls = CONFIG.requiredStablePolls;
 
   while (Date.now() < deadline) {
     pollCount++;
 
     // Check if NotebookLM is still "thinking" (most reliable indicator)
     try {
-      const thinkingElement = await page.$('div.thinking-message');
+      const thinkingElement = await page.$(THINKING_INDICATOR);
       if (thinkingElement) {
         const isVisible = await thinkingElement.isVisible();
         if (isVisible) {
@@ -288,9 +287,8 @@ async function extractLatestText(
   pollCount: number
 ): Promise<string | null> {
   // Try the primary selector first (most specific for NotebookLM)
-  const primarySelector = ".to-user-container";
   try {
-    const containers = await page.$$(primarySelector);
+    const containers = await page.$$(RESPONSE_CONTAINER_PRIMARY);
     const totalContainers = containers.length;
 
     // Early exit if no new containers possible
@@ -318,7 +316,7 @@ async function extractLatestText(
       for (let idx = 0; idx < containers.length; idx++) {
         const container = containers[idx];
         try {
-          const textElement = await container.$(".message-text-content");
+          const textElement = await container.$(RESPONSE_TEXT_CONTENT);
           if (textElement) {
             const text = await textElement.innerText();
             if (text && text.trim()) {
@@ -373,14 +371,15 @@ async function extractLatestText(
           // Prefer full container text when available
           let container = element;
           try {
-            const closest = await element.evaluateHandle((el) => {
-              return el.closest(
-                "[data-message-author], [data-message-role], [data-author], " +
-                  "[data-testid*='assistant'], [data-automation-id*='response'], article, section"
-              );
-            });
+            const containerSelector = JS_CONTAINER_SELECTOR;
+            const closest = await element.evaluateHandle((el, selector) => {
+              return el.closest(selector);
+            }, containerSelector);
             if (closest) {
-              container = closest.asElement() || element;
+              const closestEl = closest.asElement();
+              if (closestEl) {
+                container = closestEl as typeof element;
+              }
             }
           } catch {
             container = element;
@@ -400,18 +399,18 @@ async function extractLatestText(
   }
 
   // Final fallback: JavaScript evaluation
+  // Note: Code inside evaluate() runs in browser context where DOM globals exist
   try {
-    const fallbackText = await page.evaluate((): string | null => {
-      // @ts-expect-error - DOM types available in browser context
+    const selectorsToUse = [...JS_EVAL_SELECTORS];
+    const fallbackText = await page.evaluate((selectors: string[]): string | null => {
       const unique = new Set<Element>();
-      // @ts-expect-error - DOM types available in browser context
+
       const isVisible = (el: Element): boolean => {
-        // @ts-expect-error - DOM types available in browser context
-        if (!el || !(el as HTMLElement).isConnected) return false;
+        const htmlEl = el as HTMLElement;
+        if (!el || !htmlEl.isConnected) return false;
         const rect = el.getBoundingClientRect();
         if (rect.width === 0 || rect.height === 0) return false;
-        // @ts-expect-error - window available in browser context
-        const style = window.getComputedStyle(el as HTMLElement);
+        const style = getComputedStyle(htmlEl);
         if (
           style.visibility === "hidden" ||
           style.display === "none" ||
@@ -422,25 +421,17 @@ async function extractLatestText(
         return true;
       };
 
-      const selectors = [
-        "[data-message-author]",
-        "[data-message-role]",
-        "[data-author]",
-        "[data-renderer*='assistant']",
-        "[data-testid*='assistant']",
-        "[data-automation-id*='response']",
-      ];
-
       const candidates: string[] = [];
       for (const selector of selectors) {
-        // @ts-expect-error - document available in browser context
-        for (const el of document.querySelectorAll(selector)) {
+        const elements = document.querySelectorAll(selector);
+        for (let i = 0; i < elements.length; i++) {
+          const el = elements[i];
           if (!isVisible(el)) continue;
           if (unique.has(el)) continue;
           unique.add(el);
 
-          // @ts-expect-error - DOM types available in browser context
-          const text = (el as HTMLElement).innerText || (el as HTMLElement).textContent || "";
+          const htmlEl = el as HTMLElement;
+          const text = htmlEl.innerText || htmlEl.textContent || "";
           if (!text.trim()) continue;
 
           candidates.push(text.trim());
@@ -452,7 +443,7 @@ async function extractLatestText(
       }
 
       return null;
-    });
+    }, selectorsToUse);
 
     if (typeof fallbackText === "string" && fallbackText.trim()) {
       return fallbackText.trim();
@@ -464,13 +455,3 @@ async function extractLatestText(
   return null;
 }
 
-// ============================================================================
-// Exports
-// ============================================================================
-
-export default {
-  snapshotLatestResponse,
-  snapshotAllResponses,
-  countResponseElements,
-  waitForLatestAnswer,
-};

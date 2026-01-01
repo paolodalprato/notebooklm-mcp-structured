@@ -3,6 +3,20 @@
  */
 
 /**
+ * Regex pattern to detect closed browser page/context errors
+ * Used for automatic session recovery when browser context is unexpectedly closed
+ */
+export const PAGE_CLOSED_PATTERN = /has been closed|Target .* closed|Browser has been closed|Context .* closed/i;
+
+/**
+ * Helper function to check if an error indicates a closed page/context
+ */
+export function isPageClosedError(error: unknown): boolean {
+  const message = String((error as Error)?.message || error);
+  return PAGE_CLOSED_PATTERN.test(message);
+}
+
+/**
  * Error thrown when NotebookLM rate limit is exceeded
  *
  * Free users have 50 queries/day limit.

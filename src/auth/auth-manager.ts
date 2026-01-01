@@ -66,14 +66,11 @@ export class AuthManager {
       if (page) {
         try {
           const sessionStorageData: string = await page.evaluate((): string => {
-            // Properly extract sessionStorage as a plain object
+            // Extract sessionStorage as a plain object
             const storage: Record<string, string> = {};
-            // @ts-expect-error - sessionStorage exists in browser context
             for (let i = 0; i < sessionStorage.length; i++) {
-              // @ts-expect-error - sessionStorage exists in browser context
               const key = sessionStorage.key(i);
               if (key) {
-                // @ts-expect-error - sessionStorage exists in browser context
                 storage[key] = sessionStorage.getItem(key) || '';
               }
             }

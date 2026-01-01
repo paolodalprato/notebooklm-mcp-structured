@@ -330,8 +330,7 @@ export async function smoothScroll(
 
   if (!CONFIG.stealthEnabled || !CONFIG.stealthMouseMovements) {
     await page.evaluate((scrollAmount) => {
-      // @ts-expect-error - window exists in browser context
-      window.scrollBy({ top: scrollAmount, behavior: "auto" });
+      scrollBy({ top: scrollAmount, behavior: "auto" });
     }, amount);
     return;
   }
@@ -342,8 +341,7 @@ export async function smoothScroll(
 
   for (let i = 0; i < steps; i++) {
     await page.evaluate((step) => {
-      // @ts-expect-error - window exists in browser context
-      window.scrollBy({ top: step, behavior: "smooth" });
+      scrollBy({ top: step, behavior: "smooth" });
     }, stepAmount);
     await sleep(randomFloat(20, 50));
   }
@@ -477,23 +475,3 @@ export async function simulateReadingPage(page: Page): Promise<void> {
   }
 }
 
-// ============================================================================
-// Exports
-// ============================================================================
-
-export default {
-  sleep,
-  randomInt,
-  randomFloat,
-  randomChar,
-  gaussian,
-  randomDelay,
-  humanType,
-  randomMouseMovement,
-  realisticClick,
-  smoothScroll,
-  readingPause,
-  randomMouseJitter,
-  hoverElement,
-  simulateReadingPage,
-};

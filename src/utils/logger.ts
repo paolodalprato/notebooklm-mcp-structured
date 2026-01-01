@@ -1,6 +1,11 @@
 /**
  * Console logging utilities with colors and formatting
  * Similar to Python's rich.console
+ *
+ * Supports dependency injection for testing:
+ * - Use createLogger() to create a custom logger instance
+ * - Use setGlobalLogger() to replace the global logger
+ * - Use resetGlobalLogger() to restore the default logger
  */
 
 type LogLevel = "info" | "success" | "warning" | "error" | "debug" | "dim";
@@ -22,13 +27,29 @@ const STYLES: Record<LogLevel, LogStyle> = {
 const RESET = "\x1b[0m";
 
 /**
+ * Logger interface for dependency injection
+ */
+export interface ILogger {
+  info(message: string): void;
+  success(message: string): void;
+  warning(message: string): void;
+  error(message: string): void;
+  debug(message: string): void;
+  dim(message: string): void;
+  setEnabled(enabled: boolean): void;
+}
+
+/**
  * Logger class for consistent console output
  */
-export class Logger {
+export class Logger implements ILogger {
   private enabled: boolean;
+  private outputFn: (message: string) => void;
 
-  constructor(enabled: boolean = true) {
+  constructor(enabled: boolean = true, outputFn?: (message: string) => void) {
     this.enabled = enabled;
+    // Default: use stderr to keep stdout clean for MCP JSON-RPC
+    this.outputFn = outputFn ?? ((msg) => console.error(msg));
   }
 
   /**
@@ -41,73 +62,91 @@ export class Logger {
     const timestamp = new Date().toISOString().split("T")[1].slice(0, 8);
     const formattedMessage = `${style.color}${style.prefix}  [${timestamp}] ${message}${RESET}`;
 
-    // Use stderr for logs to keep stdout clean for MCP JSON-RPC
-    console.error(formattedMessage);
+    this.outputFn(formattedMessage);
   }
 
-  /**
-   * Log info message
-   */
   info(message: string): void {
     this.log(message, "info");
   }
 
-  /**
-   * Log success message
-   */
   success(message: string): void {
     this.log(message, "success");
   }
 
-  /**
-   * Log warning message
-   */
   warning(message: string): void {
     this.log(message, "warning");
   }
 
-  /**
-   * Log error message
-   */
   error(message: string): void {
     this.log(message, "error");
   }
 
-  /**
-   * Log debug message
-   */
   debug(message: string): void {
     this.log(message, "debug");
   }
 
-  /**
-   * Log dim message (for less important info)
-   */
   dim(message: string): void {
     this.log(message, "dim");
   }
 
-  /**
-   * Enable or disable logging
-   */
   setEnabled(enabled: boolean): void {
     this.enabled = enabled;
   }
 }
 
 /**
- * Global logger instance
+ * Create a new logger instance (useful for testing)
+ *
+ * @param enabled Whether logging is enabled
+ * @param outputFn Custom output function (defaults to console.error)
  */
-export const logger = new Logger();
+export function createLogger(
+  enabled: boolean = true,
+  outputFn?: (message: string) => void
+): ILogger {
+  return new Logger(enabled, outputFn);
+}
+
+/**
+ * Create a silent logger that captures messages (for testing)
+ */
+export function createTestLogger(): ILogger & { messages: string[] } {
+  const messages: string[] = [];
+  const logger = new Logger(true, (msg) => messages.push(msg));
+  return Object.assign(logger, { messages });
+}
+
+// Default global logger instance
+let globalLogger: ILogger = new Logger();
+
+/**
+ * Set the global logger instance (for dependency injection)
+ */
+export function setGlobalLogger(newLogger: ILogger): void {
+  globalLogger = newLogger;
+}
+
+/**
+ * Reset the global logger to the default instance
+ */
+export function resetGlobalLogger(): void {
+  globalLogger = new Logger();
+}
+
+/**
+ * Global logger instance (legacy export for backward compatibility)
+ */
+export const logger = globalLogger;
 
 /**
  * Convenience functions for quick logging
+ * Uses the current global logger instance
  */
 export const log = {
-  info: (msg: string) => logger.info(msg),
-  success: (msg: string) => logger.success(msg),
-  warning: (msg: string) => logger.warning(msg),
-  error: (msg: string) => logger.error(msg),
-  debug: (msg: string) => logger.debug(msg),
-  dim: (msg: string) => logger.dim(msg),
+  info: (msg: string) => globalLogger.info(msg),
+  success: (msg: string) => globalLogger.success(msg),
+  warning: (msg: string) => globalLogger.warning(msg),
+  error: (msg: string) => globalLogger.error(msg),
+  debug: (msg: string) => globalLogger.debug(msg),
+  dim: (msg: string) => globalLogger.dim(msg),
 };
