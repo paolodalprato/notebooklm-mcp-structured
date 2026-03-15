@@ -28,12 +28,10 @@ Tools marked with 🔐 automatically verify authentication and trigger login if 
 
 - `get_health`
   - **Enhanced diagnostics**: Auth status, Chrome state, connection verification
-  - Shows if Chrome is running (blocks auth setup)
   - Reports active sessions and configuration
 
 - `setup_auth`
   - Opens persistent Chrome profile for Google login
-  - ⚠️ Requires Chrome to be closed first
 
 - `re_auth`
   - Switch to a different Google account or re-authenticate

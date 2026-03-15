@@ -85,29 +85,16 @@ What are the main findings in the research papers?
 
 Claude structures it as:
 ```
-RESPONSE INSTRUCTIONS
+What are the main findings in the research papers?
 
-TASK: What are the main findings in the research papers?
+Organize the response by thematic topics. Cover all aspects discussed in the documents.
+For each topic:
+- TOPIC: [identifying title]
+- DESCRIPTION: [synthesis with context, connecting information across documents]
+- EVIDENCE: "direct quote" [Source: document]
 
-OPERATIONAL CONSTRAINTS
-- Use ONLY information explicitly present in uploaded documents
-- DO NOT add external knowledge or interpretations
-- If information is not present, state: "[NOT FOUND IN DOCUMENTS]"
-
-REQUIRED OUTPUT FORMAT
-For each finding:
-- FINDING: [description]
-- SOURCE: [document name/section]
-- QUOTE: "direct quote supporting the finding"
-
-CITATIONS
-- Every claim MUST include source
-- Use direct quotes where possible
-
-HANDLING MISSING INFORMATION
-- If information is missing, declare it explicitly
-
-BEGIN STRUCTURED RESPONSE
+If a topic appears in multiple documents, show evidence from each.
+If information is not found: [NOT FOUND IN DOCUMENTS]
 ```
 
 **Critical Formatting Rule:**
@@ -144,12 +131,10 @@ The MCP server automatically verifies the connection to NotebookLM before execut
 
 **How it works:**
 1. When you make a request that requires NotebookLM (e.g., asking a question), the server checks if authentication is valid
-2. If authentication is expired or missing:
-   - **Chrome is running:** You'll receive a message asking to close Chrome first
-   - **Chrome is closed:** A browser window opens automatically for Google login
+2. If authentication is expired or missing, a browser window opens automatically for Google login
 3. After successful login, your original request proceeds automatically
 
-**No manual intervention needed** - the server handles authentication seamlessly within the conversation flow.
+**No manual intervention needed** - the server handles authentication seamlessly within the conversation flow, even if Chrome is already running.
 
 ## Installation
 
@@ -284,6 +269,22 @@ sequenceDiagram
 | **3a** | MCP Server | Modifies response | **FOLLOW_UP_REMINDER**: prompts Claude to check if more questions needed |
 | **3b** | Claude | Presents response | Applies Response Handling (source fidelity) read in Phase 1 |
 
+### Three-Level Instruction Architecture
+
+The MCP server orchestrates **two LLMs** (Claude and NotebookLM/Gemini) using three distinct instruction mechanisms, each targeting a different actor:
+
+| Level | Where | Target | Purpose | Code Reference |
+|-------|-------|--------|---------|----------------|
+| **1. Tool Description** | `ask-question.ts` | Claude | How to structure prompts, when to do follow-ups, session management | `buildAskQuestionDescription()` |
+| **2. Structured Prompt** | `structuring-guidelines.ts` | NotebookLM | Source fidelity constraints, citation format, missing info handling | `buildStructuringGuidelines()` |
+| **3. Response Suffix** | `handlers.ts` | Claude | Push Claude to verify completeness before replying to the user | `FOLLOW_UP_REMINDER` constant |
+
+**Key distinction:** The structured prompt (Level 2) is sent to NotebookLM to constrain its response. But some instructions in the tool description (Level 1) and the response suffix (Level 3) never reach NotebookLM — they guide Claude's behavior before and after the NotebookLM interaction.
+
+**Dual-purpose instructions in the tool description:**
+- *For NotebookLM* (via the structured prompt Claude generates): operational constraints, citation requirements, output format
+- *For Claude only* (never sent to NotebookLM): "present faithfully WITHOUT adding external knowledge", "pause, compare with the user's goal", follow-up strategy
+
 ### Key Architectural Insight
 
 The MCP server does **not** add constraints on source fidelity *after* receiving the response. The fidelity instructions are read by Claude *before* sending the question, in the tool description. The server only adds an operational reminder ("do you need more information?"), not a behavioral constraint.
@@ -309,10 +310,10 @@ Claude automatically detects question type and applies appropriate structure:
 | Type | Trigger Words | Output Structure |
 |------|--------------|------------------|
 | Comparison | "compare", "vs", "difference" | Elements, Similarities, Differences, Synthesis |
-| List | "list", "identify", "which" | Numbered items with descriptions and sources |
-| Analysis | "analyze", "examine", "evaluate" | Subject, Observations, Evidence, Conclusions |
-| Explanation | "explain", "why", "how" | Concept, Answer, Examples, Related info |
-| Extraction | (default) | Data points with quotes and sources |
+| List | "list", "identify", "which" | Thematic topics with descriptions, evidence, cross-references |
+| Analysis | "analyze", "examine", "evaluate" | Thematic topics with cross-document connections |
+| Explanation | "explain", "why", "how" | Core concept, examples, related concepts, limitations |
+| Extraction | (default) | Thematic topics with descriptions, evidence, cross-references |
 
 ## Tools Available
 

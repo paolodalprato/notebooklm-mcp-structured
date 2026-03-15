@@ -23,26 +23,21 @@ Unlike the original MCP server, this fork **automatically transforms** your ques
 Your question: "What are the main findings?"
 
 Claude structures it as:
-┌─────────────────────────────────────────────┐
-│ RESPONSE INSTRUCTIONS                       │
-│                                             │
-│ TASK: What are the main findings?           │
-│                                             │
-│ OPERATIONAL CONSTRAINTS                     │
-│ - Use ONLY information from documents       │
-│ - DO NOT add external knowledge             │
-│ - If not found: "[NOT FOUND IN DOCUMENTS]"  │
-│                                             │
-│ REQUIRED OUTPUT FORMAT                      │
-│ For each finding:                           │
-│ - FINDING: [description]                    │
-│ - SOURCE: [document name/section]           │
-│ - QUOTE: "direct quote"                     │
-│                                             │
-│ BEGIN STRUCTURED RESPONSE                   │
-└─────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│ What are the main findings?                                          │
+│                                                                      │
+│ Organize the response by thematic topics.                            │
+│ Cover all aspects discussed in the documents.                        │
+│ For each topic:                                                      │
+│ - TOPIC: [identifying title]                                         │
+│ - DESCRIPTION: [synthesis with context, cross-document connections]  │
+│ - EVIDENCE: "direct quote" [Source: document]                        │
+│                                                                      │
+│ If a topic appears in multiple documents, show evidence from each.   │
+│ If information is not found: [NOT FOUND IN DOCUMENTS]                │
+└──────────────────────────────────────────────────────────────────────┘
 
-NotebookLM responds with source-faithful answer
+NotebookLM responds with organized, source-faithful answer
 ```
 
 **You just ask naturally** - Claude handles the structuring automatically.
@@ -105,10 +100,9 @@ Claude automatically detects your question type and applies the appropriate stru
 "Compare approach A vs approach B in the documents"
 
 Output structure:
-- Elements being compared
-- Similarities (with sources)
-- Differences (with sources)
-- Synthesis
+- Points of comparison with direct quotes from each element
+- Similarities and differences with textual evidence
+- Cross-references: where documents agree or contradict
 ```
 
 ### List Questions
@@ -118,9 +112,9 @@ Output structure:
 "List all the requirements mentioned"
 
 Output structure:
-1. Item - SOURCE: [document] - "quote"
-2. Item - SOURCE: [document] - "quote"
-...
+- TOPIC: [identifying title]
+- DESCRIPTION: [synthesis with context, cross-document connections]
+- EVIDENCE: "direct quote" [Source: document]
 ```
 
 ### Analysis Questions
@@ -130,10 +124,10 @@ Output structure:
 "Analyze the risk factors discussed"
 
 Output structure:
-- Subject of analysis
-- Observations (with evidence)
-- Evidence (direct quotes)
-- Conclusions (sourced)
+- TOPIC: [identifying title]
+- DESCRIPTION: [synthesis with context, cross-document connections]
+- EVIDENCE: "direct quote" [Source: document]
+- Cross-document connections where different documents address the same topic
 ```
 
 ### Explanation Questions
@@ -143,10 +137,10 @@ Output structure:
 "Explain how the process works according to the manual"
 
 Output structure:
-- Concept identified
-- Explanation (sourced)
-- Examples from documents
-- Related information
+1. Core concept with supporting quotes
+2. Examples or cases from documents
+3. Related concepts connected to the topic
+4. Limitations or caveats noted in documents
 ```
 
 ### Extraction Questions
@@ -156,9 +150,9 @@ Output structure:
 "What is the deadline mentioned?"
 
 Output structure:
-- Data point
-- SOURCE: [document/section]
-- QUOTE: "exact text"
+- TOPIC: [identifying title]
+- DESCRIPTION: [synthesis with context, cross-document connections]
+- EVIDENCE: "direct quote" [Source: document]
 ```
 
 ---
@@ -217,12 +211,10 @@ This fork automatically checks authentication before operations:
 
 1. You ask a question
 2. Server verifies NotebookLM connection
-3. If expired/missing:
-   - Chrome running → Message to close Chrome
-   - Chrome closed → Auto-opens login browser
+3. If expired/missing, a browser window opens automatically for Google login
 4. After login, original request proceeds
 
-**No manual intervention needed** in most cases.
+**No manual intervention needed** - authentication works even if Chrome is already running.
 
 ### Manual Authentication
 

@@ -50,9 +50,7 @@ export class ToolHandlers {
    *
    * Flow:
    * 1. Check if auth state is valid → proceed if yes
-   * 2. If auth invalid, check if Chrome is running
-   * 3. If Chrome running → return error asking user to close it
-   * 4. If Chrome closed → perform auto-auth and proceed
+   * 2. If auth invalid → perform auto-auth and proceed
    *
    * @param sendProgress Optional progress callback for UI updates
    * @returns ConnectionCheckResult or null if ready to proceed
@@ -70,76 +68,42 @@ export class ToolHandlers {
       return { ready: true };
     }
 
-    // Auth not valid - need to handle
-    if (checkResult.requiresUserAction) {
-      // Chrome is running - user must close it
-      log.warning("🚫 [PRE-CHECK] Chrome is running - user action required");
-      return {
-        ready: false,
-        result: {
-          success: false,
-          error: checkResult.userActionMessage || "Chrome must be closed before authentication",
-          data: {
-            status: "chrome_running",
-            requires_action: true,
-            action: "close_chrome",
-            message: checkResult.userActionMessage,
-            timeout_seconds: 60,
-          } as any,
-        },
-      };
-    }
+    // Auth not valid - proceed with auto-auth
+    log.info("🔐 [PRE-CHECK] Starting automatic authentication...");
+    await sendProgress?.("Authentication required - starting login...", 1, 5);
 
-    if (checkResult.canAutoAuth) {
-      // Chrome is closed - can proceed with auto-auth
-      log.info("🔐 [PRE-CHECK] Starting automatic authentication...");
-      await sendProgress?.("Authentication required - starting login...", 1, 5);
+    try {
+      const authSuccess = await this.authManager.performSetup(sendProgress);
 
-      try {
-        // Perform interactive authentication
-        const authSuccess = await this.authManager.performSetup(sendProgress);
-
-        if (authSuccess) {
-          log.success("✅ [PRE-CHECK] Authentication successful");
-          await sendProgress?.("Authentication successful!", 2, 5);
-          return { ready: true };
-        } else {
-          log.error("❌ [PRE-CHECK] Authentication failed");
-          return {
-            ready: false,
-            result: {
-              success: false,
-              error:
-                "Authentication failed. Please try again or use the setup_auth tool directly.\n\n" +
-                "If the problem persists, try:\n" +
-                "1. Close all Chrome windows\n" +
-                "2. Run cleanup_data(confirm=true) to reset\n" +
-                "3. Try your request again",
-            },
-          };
-        }
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        log.error(`❌ [PRE-CHECK] Authentication error: ${errorMessage}`);
+      if (authSuccess) {
+        log.success("✅ [PRE-CHECK] Authentication successful");
+        await sendProgress?.("Authentication successful!", 2, 5);
+        return { ready: true };
+      } else {
+        log.error("❌ [PRE-CHECK] Authentication failed");
         return {
           ready: false,
           result: {
             success: false,
-            error: `Authentication error: ${errorMessage}`,
+            error:
+              "Authentication failed. Please try again or use the setup_auth tool directly.\n\n" +
+              "If the problem persists, try:\n" +
+              "1. Run cleanup_data(confirm=true) to reset\n" +
+              "2. Try your request again",
           },
         };
       }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      log.error(`❌ [PRE-CHECK] Authentication error: ${errorMessage}`);
+      return {
+        ready: false,
+        result: {
+          success: false,
+          error: `Authentication error: ${errorMessage}`,
+        },
+      };
     }
-
-    // Fallback - should not reach here
-    log.error("❌ [PRE-CHECK] Unexpected state");
-    return {
-      ready: false,
-      result: {
-        success: false,
-        error: "Unexpected connection state. Please try setup_auth manually.",
-      },
-    };
   }
 
   /**
@@ -215,7 +179,7 @@ export class ToolHandlers {
       await sendProgress?.("Getting or creating browser session...", 1, 5);
 
       // Apply browser options temporarily
-      const originalConfig = { ...CONFIG };
+      const originalConfig = structuredClone(CONFIG);
       const effectiveConfig = applyBrowserOptions(browser_options, show_browser);
       Object.assign(CONFIG, effectiveConfig);
 
@@ -500,10 +464,7 @@ export class ToolHandlers {
       const stats = this.sessionManager.getStats();
 
       // Determine overall status
-      let status = "ok";
-      if (!authenticated) {
-        status = chromeRunning ? "auth_required_chrome_open" : "auth_required";
-      }
+      const status = authenticated ? "ok" : "auth_required";
 
       const result = {
         status,
@@ -518,11 +479,8 @@ export class ToolHandlers {
         headless: CONFIG.headless,
         auto_login_enabled: CONFIG.autoLoginEnabled,
         stealth_enabled: CONFIG.stealthEnabled,
-        // Add troubleshooting tip based on status
         ...((!authenticated) && {
-          troubleshooting_tip: chromeRunning
-            ? "Chrome is running. Close all Chrome windows first, then retry your request or use setup_auth."
-            : "Authentication required. Your next request will automatically open a browser for login."
+          troubleshooting_tip: "Authentication required. Your next request will automatically open a browser for login."
         }),
       };
 

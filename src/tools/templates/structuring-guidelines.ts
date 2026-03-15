@@ -1,10 +1,16 @@
 /**
- * Prompt Structuring Guidelines Template
+ * Prompt Structuring Guidelines Template v2
  *
- * These guidelines instruct Claude on how to structure prompts for NotebookLM
- * to ensure responses come ONLY from uploaded documents (source fidelity).
+ * Task-oriented approach: each question type gets a specific prompt pattern
+ * that focuses on output structure and cross-referencing.
  *
- * Extracted from ask-question.ts for maintainability.
+ * Design principles:
+ * - No redundant constraints (NotebookLM already uses only uploaded documents)
+ * - Positive instructions ("do X") instead of negative ("don't do Y")
+ * - Type-specific prompt patterns instead of a rigid universal template
+ * - Explicit cross-referencing to leverage NLM's multi-doc capabilities
+ * - Completeness signal to push for exhaustive coverage
+ * - Natural language prompting for better Gemini response quality
  */
 
 /**
@@ -16,116 +22,104 @@
 export function buildStructuringGuidelines(bt: string): string {
   return `
 
-## 🎯 PROMPT STRUCTURING GUIDELINES (CRITICAL FOR SOURCE FIDELITY)
+## PROMPT STRUCTURING GUIDELINES
 
-Before sending any question to NotebookLM, you MUST structure it to ensure responses come ONLY from uploaded documents.
+Before sending any question to NotebookLM, structure it to get a well-organized, evidence-based response.
 
-**Why Structure?** Simple questions risk mixing document content with external knowledge. Structured prompts enforce source fidelity.
-
-**How to Structure (adapt to user's language):**
-
-${bt}${bt}${bt}
-RESPONSE INSTRUCTIONS
-
-TASK: [user's original question - keep in their language]
-
-OPERATIONAL CONSTRAINTS
-- Use ONLY information explicitly present in uploaded documents
-- DO NOT add external knowledge, interpretations, or inferences
-- If information is not present, declare it explicitly (e.g., "[NOT FOUND IN DOCUMENTS]")
-
-REQUIRED OUTPUT FORMAT
-[Adapt based on question type - see below]
-
-CITATIONS
-- Every claim MUST include source (document name or section)
-- Use direct quotes where possible
-- Citation format: "quoted text" [Source: document name]
-
-HANDLING MISSING INFORMATION
-- If requested information is not in documents, state it explicitly
-- Never invent, infer, or complete with external knowledge
-- An incomplete but accurate response is preferable to unreliable completeness
-
-BEGIN STRUCTURED RESPONSE
-${bt}${bt}${bt}
-
-**CRITICAL FORMATTING RULES:**
-- Translate these instructions to match the user's language for better NotebookLM understanding
-- Do NOT use decorative lines (===, ---) as they cause NotebookLM timeouts
+**Core rules:**
+- Write the prompt in the user's language
 - Keep the user's original question wording intact
+- Never use decorative lines (===, ---) as they cause NotebookLM timeouts
+- Always include: thematic output format, citation format, completeness signal, and the [NOT FOUND] placeholder
 
-**Question Type Adaptation:**
+**How to structure:** Pick the matching question type below and adapt its pattern to the user's question.
 
-1. **Comparison** (compare, vs, difference): Format as elements, similarities, differences, synthesis
-2. **List** (list, identify, which): Format as numbered items with descriptions and sources
-3. **Analysis** (analyze, examine, evaluate): Format as subject, observations, evidence, conclusions
-4. **Explanation** (explain, why, how): Format as concept, answer, examples, related info
-5. **Extraction** (default): Format as data points with quotes and sources
+### Question Type Patterns
 
-**Example - Italian User:**
+**1. Comparison** (compare, vs, difference, similarities)
 
-User asks: "Analizza le sentenze presenti nei documenti"
-
-You structure as:
 ${bt}${bt}${bt}
-ISTRUZIONI PER LA RISPOSTA
+[user's question]
 
-COMPITO: Analizza le sentenze presenti nei documenti
+Organize the response by points of comparison. Cover all aspects discussed in the documents.
+For each point:
+1. How each element addresses it, with direct quotes ("text" [Source: document])
+2. Similarities and differences, with textual evidence
 
-VINCOLI OPERATIVI
-- Usa ESCLUSIVAMENTE informazioni esplicite nei documenti caricati
-- NON aggiungere conoscenze esterne, interpretazioni o inferenze
-- Se un'informazione non è presente, dichiara: "[NON PRESENTE NEI DOCUMENTI]"
-
-FORMATO OUTPUT RICHIESTO
-Per ogni sentenza trovata:
-- SENTENZA: [identificativo]
-- OSSERVAZIONI: [analisi basata sui documenti]
-- EVIDENZE: "citazioni dirette" [Fonte]
-
-CITAZIONI
-- Ogni affermazione DEVE includere la fonte
-- Usa citazioni dirette tra virgolette dove possibile
-
-GESTIONE INFORMAZIONI MANCANTI
-- Se un'informazione non è nei documenti, dichiaralo esplicitamente
-
-INIZIO RISPOSTA STRUTTURATA
+Cross-references: highlight where documents agree or contradict each other.
+If information is not found: [NOT FOUND IN DOCUMENTS]
 ${bt}${bt}${bt}
 
-**Example - English User:**
+**2. List / Identification** (list, identify, which, what are the)
 
-User asks: "What are the main findings in the research papers?"
-
-You structure as:
 ${bt}${bt}${bt}
-RESPONSE INSTRUCTIONS
+[user's question]
 
-TASK: What are the main findings in the research papers?
+Organize the response by thematic topics. Cover all aspects discussed in the documents.
+For each topic:
+- TOPIC: [identifying title]
+- DESCRIPTION: [synthesis with context, connecting information across documents]
+- EVIDENCE: "direct quote" [Source: document]
 
-OPERATIONAL CONSTRAINTS
-- Use ONLY information explicitly present in uploaded documents
-- DO NOT add external knowledge or interpretations
-- If information is not present, state: "[NOT FOUND IN DOCUMENTS]"
-
-REQUIRED OUTPUT FORMAT
-For each finding:
-- FINDING: [description]
-- SOURCE: [document name/section]
-- QUOTE: "direct quote supporting the finding"
-
-CITATIONS
-- Every claim MUST include source
-- Use direct quotes where possible
-
-HANDLING MISSING INFORMATION
-- If information is missing, declare it explicitly
-
-BEGIN STRUCTURED RESPONSE
+If the same item appears in multiple documents, show all occurrences and any discrepancies.
+If information is not found: [NOT FOUND IN DOCUMENTS]
 ${bt}${bt}${bt}
 
-**Response Handling:**
+**3. Analysis** (analyze, examine, evaluate, assess)
+
+${bt}${bt}${bt}
+[user's question]
+
+Organize the response by thematic topics. Cover all aspects discussed in the documents.
+For each topic:
+- TOPIC: [identifying title]
+- DESCRIPTION: [synthesis with context, connecting information across documents]
+- EVIDENCE: "direct quote" [Source: document]
+
+Cross-document connections: where different documents address the same topic, show evidence from each.
+If information is not found: [NOT FOUND IN DOCUMENTS]
+${bt}${bt}${bt}
+
+**4. Explanation** (explain, why, how, what does it mean)
+
+${bt}${bt}${bt}
+[user's question]
+
+Answer based on what the documents explain. Cover all aspects discussed in the documents.
+1. Core concept or answer, with supporting quotes ("text" [Source])
+2. Examples or cases mentioned in the documents
+3. Related concepts that the documents connect to this topic
+4. Limitations or caveats noted in the documents
+
+If information is not found: [NOT FOUND IN DOCUMENTS]
+${bt}${bt}${bt}
+
+**5. Extraction** (default for all other questions)
+
+${bt}${bt}${bt}
+[user's question]
+
+Organize the response by thematic topics. Cover all aspects discussed in the documents.
+For each topic:
+- TOPIC: [identifying title]
+- DESCRIPTION: [synthesis with context, connecting information across documents]
+- EVIDENCE: "direct quote" [Source: document]
+
+If a topic appears in multiple documents, show evidence from each.
+If information is not found: [NOT FOUND IN DOCUMENTS]
+${bt}${bt}${bt}
+
+### Language Adaptation
+
+Translate the entire prompt to the user's language. Examples:
+
+- "Organize the response by thematic topics" → "Organizza la risposta per argomenti tematici"
+- "Cover all aspects" → "Cerca di coprire tutti gli aspetti trattati nei documenti"
+- "TOPIC/DESCRIPTION/EVIDENCE" → "ARGOMENTO/DESCRIZIONE/EVIDENZE"
+- "Source:" → "Fonte:"
+- "[NOT FOUND IN DOCUMENTS]" → "[NON PRESENTE NEI DOCUMENTI]"
+
+### Response Handling (for Claude, not NotebookLM)
 After receiving NotebookLM's answer, present it faithfully to the user WITHOUT adding external knowledge or "improvements".
 `;
 }

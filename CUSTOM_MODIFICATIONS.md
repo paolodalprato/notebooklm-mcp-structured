@@ -23,49 +23,41 @@ Transform simple user questions into well-engineered prompts that enforce explic
 
 **Guidelines Include:**
 
-1. **Why Structure?**
-   - Simple questions risk mixing document content with external knowledge
-   - Structured prompts enforce source fidelity
-
-2. **How to Structure:**
+1. **Task-oriented prompt patterns** — each question type gets a specific structure:
    ```
-   RESPONSE INSTRUCTIONS
+   [user's original question]
 
-   TASK: [user's original question]
+   Organize the response by thematic topics. Cover all aspects discussed in the documents.
+   For each topic:
+   - TOPIC: [identifying title]
+   - DESCRIPTION: [synthesis with context, connecting information across documents]
+   - EVIDENCE: "direct quote" [Source: document]
 
-   OPERATIONAL CONSTRAINTS
-   - Use ONLY information explicitly present in uploaded documents
-   - DO NOT add external knowledge, interpretations, or inferences
-   - If information is not present, declare it explicitly
-
-   REQUIRED OUTPUT FORMAT
-   [Adapted based on question type]
-
-   CITATIONS
-   - Every claim MUST include source
-   - Use direct quotes where possible
-
-   HANDLING MISSING INFORMATION
-   - If requested information is not in documents, state it explicitly
-   - Never invent, infer, or complete with external knowledge
-
-   BEGIN STRUCTURED RESPONSE
+   If a topic appears in multiple documents, show evidence from each.
+   If information is not found: [NOT FOUND IN DOCUMENTS]
    ```
 
-3. **Critical Formatting Rules:**
+2. **Design principles:**
+   - No redundant constraints (NotebookLM already uses only uploaded documents)
+   - Positive instructions ("organize by topics") instead of negative ("don't add external knowledge")
+   - Explicit completeness signal ("cover all aspects")
+   - Cross-referencing requests to leverage multi-doc capabilities
+   - Natural language for better Gemini response quality
+
+3. **Critical formatting rules:**
    - Translate instructions to match the user's question language
-   - Do NOT use decorative lines (`===`, `---`) - they cause NotebookLM timeouts
+   - Do NOT use decorative lines (`===`, `---`) — they cause NotebookLM timeouts
    - Keep user's original question wording intact
 
-4. **Question Type Adaptation:**
-   - **Comparison**: Format as elements, similarities, differences, synthesis
-   - **List**: Format as numbered items with descriptions and sources
-   - **Analysis**: Format as subject, observations, evidence, conclusions
-   - **Explanation**: Format as concept, answer, examples, related info
-   - **Extraction**: Format as data points with quotes and sources
+4. **Question type adaptation:**
+   - **Comparison**: Points of comparison, agreements/contradictions across documents
+   - **List**: Thematic topics with descriptions, evidence, cross-references
+   - **Analysis**: Thematic topics with cross-document connections
+   - **Explanation**: Core concept, examples, related concepts, limitations
+   - **Extraction** (default): Thematic topics with descriptions, evidence, cross-references
 
-5. **Multilingual Examples:**
-   - Includes full examples in both Italian and English
+5. **Language adaptation:**
+   - Translation examples for key terms (TOPIC→ARGOMENTO, EVIDENCE→EVIDENZE, etc.)
    - Claude naturally adapts to any language it supports
 
 6. **Response Handling:**
@@ -176,7 +168,7 @@ sequenceDiagram
 
 ---
 
-#### **Structured Fork: Dual-Phase Instruction**
+#### **Structured Fork: Three-Level Instruction**
 
 ```mermaid
 sequenceDiagram
@@ -213,9 +205,9 @@ sequenceDiagram
 
 ---
 
-### 🔍 The Two Critical Instruction Phases
+### 🔍 Three-Level Instruction Architecture
 
-This fork introduces **two distinct instruction mechanisms** embedded in the tool description:
+This fork orchestrates **two LLMs** (Claude and NotebookLM/Gemini) using three distinct instruction levels:
 
 #### **Phase 1: Pre-Send Structuring** (`ask-question.ts:12-121`)
 
@@ -266,6 +258,36 @@ WITHOUT adding external knowledge or "improvements".
 
 ---
 
+#### **Level 3: Follow-Up Reminder** (`handlers.ts:22-23`)
+
+**Purpose:** Push Claude to verify completeness before replying to the user.
+
+**The mechanism:**
+```typescript
+const FOLLOW_UP_REMINDER = "\n\n---\n🔍 EXTREMELY IMPORTANT: Is that ALL you need to know?...";
+```
+
+This constant is appended by the MCP server to every NotebookLM response. It never reaches NotebookLM — it targets Claude exclusively, prompting it to evaluate whether the user's question has been fully answered or if additional queries are needed.
+
+---
+
+#### **Which Instructions Target Which LLM?**
+
+| Instruction | Target | Reaches NotebookLM? | Source |
+|-------------|--------|---------------------|--------|
+| Structuring guidelines (how to transform) | Claude | No (guides prompt creation) | Tool description |
+| Thematic output format (TOPIC/DESCRIPTION/EVIDENCE) | NotebookLM | **Yes** (in structured prompt) | Structured prompt |
+| Completeness signal ("Cover all aspects") | NotebookLM | **Yes** (in structured prompt) | Structured prompt |
+| Citation format ("quote" [Source: document]) | NotebookLM | **Yes** (in structured prompt) | Structured prompt |
+| Cross-referencing instructions | NotebookLM | **Yes** (in structured prompt) | Structured prompt |
+| [NOT FOUND IN DOCUMENTS] placeholder | NotebookLM | **Yes** (in structured prompt) | Structured prompt |
+| "Present faithfully WITHOUT external knowledge" | Claude | No | Tool description |
+| "Pause, compare with user's goal" | Claude | No | Tool description |
+| Session flow / multi-pass strategy | Claude | No | Tool description |
+| FOLLOW_UP_REMINDER | Claude | No | Response suffix |
+
+---
+
 ### 🆚 Summary: Why the Differences Matter
 
 | Aspect | Original MCP | Structured Fork |
@@ -273,7 +295,7 @@ WITHOUT adding external knowledge or "improvements".
 | **Question transformation** | Free rephrasing | Structured with constraints, original wording preserved |
 | **Response presentation** | May add context/interpretation | **Instructed to present faithfully** (explicit instruction) |
 | **Source fidelity target** | NotebookLM (implicit) | **Claude's presentation layer** (explicit) |
-| **Critical innovation** | Simple passthrough | Dual-phase instruction (pre-send + post-receive) |
+| **Critical innovation** | Simple passthrough | Three-level instruction (pre-send + response handling + follow-up) |
 
 **The fork recognizes:** The weakest link in source fidelity isn't NotebookLM (already grounded) but **Claude's natural tendency to enhance/contextualize** when presenting results to users.
 
@@ -430,9 +452,10 @@ This section intentionally:
 For the complete request workflow diagram and architectural explanation, see the [Architecture section in README.md](README.md#architecture).
 
 Implementation details:
-- **Structuring Guidelines**: `src/tools/definitions/ask-question.ts` (lines 12-125)
-- **Response Handling instruction**: `src/tools/definitions/ask-question.ts` (lines 123-124)
-- **FOLLOW_UP_REMINDER**: `src/tools/handlers.ts` (lines 22-23, applied at line 247)
+- **Structuring Guidelines**: `src/tools/templates/structuring-guidelines.ts`
+- **Tool Description Builder**: `src/tools/definitions/ask-question.ts`
+- **Response Handling instruction**: embedded in structuring guidelines (last section)
+- **FOLLOW_UP_REMINDER**: `src/tools/handlers.ts`
 
 ## Use Case Examples
 
@@ -445,36 +468,23 @@ Analizza le sentenze presenti nei documenti
 
 **Claude structures as:**
 ```
-ISTRUZIONI PER LA RISPOSTA
+Analizza le sentenze presenti nei documenti.
 
-COMPITO: Analizza le sentenze presenti nei documenti
+Organizza la risposta per argomenti tematici. Cerca di coprire tutti gli aspetti trattati nei documenti.
+Per ogni argomento:
+- ARGOMENTO: [titolo identificativo]
+- DESCRIZIONE: [sintesi con contesto, collegando le informazioni tra documenti diversi]
+- EVIDENZE: "citazione diretta" [Fonte: documento]
 
-VINCOLI OPERATIVI
-- Usa ESCLUSIVAMENTE informazioni esplicite nei documenti caricati
-- NON aggiungere conoscenze esterne, interpretazioni o inferenze
-- Se un'informazione non è presente, dichiara: "[NON PRESENTE NEI DOCUMENTI]"
-
-FORMATO OUTPUT RICHIESTO
-Per ogni sentenza trovata:
-- SENTENZA: [identificativo]
-- OSSERVAZIONI: [analisi basata sui documenti]
-- EVIDENZE: "citazioni dirette" [Fonte]
-
-CITAZIONI
-- Ogni affermazione DEVE includere la fonte
-- Usa citazioni dirette dove possibile
-
-GESTIONE INFORMAZIONI MANCANTI
-- Se un'informazione non è nei documenti, dichiaralo esplicitamente
-
-INIZIO RISPOSTA STRUTTURATA
+Se un argomento appare in più documenti, mostra le evidenze da ciascuno.
+Se non presente nei documenti: [NON PRESENTE NEI DOCUMENTI]
 ```
 
 **Result:**
-- NotebookLM receives explicit constraints in Italian
-- Response uses ONLY document-provided information
-- All statements include citations
-- Missing information explicitly declared
+- Thematic organization of findings
+- Cross-referencing across documents
+- Direct quotes with source attribution
+- Completeness signal ensures exhaustive coverage
 
 ### Research Fact-Checking
 
@@ -485,34 +495,21 @@ What does the study say about climate change?
 
 **Claude structures as:**
 ```
-RESPONSE INSTRUCTIONS
+What does the study say about climate change?
 
-TASK: What does the study say about climate change?
+Organize the response by thematic topics. Cover all aspects discussed in the documents.
+For each topic:
+- TOPIC: [identifying title]
+- DESCRIPTION: [synthesis with context, connecting information across documents]
+- EVIDENCE: "direct quote" [Source: document]
 
-OPERATIONAL CONSTRAINTS
-- Use ONLY information explicitly present in uploaded documents
-- DO NOT add external knowledge or interpretations
-- If information is not present, state: "[NOT FOUND IN DOCUMENTS]"
-
-REQUIRED OUTPUT FORMAT
-For each finding:
-- FINDING: [description]
-- SOURCE: [document name/section]
-- QUOTE: "direct quote supporting the finding"
-
-CITATIONS
-- Every claim MUST include source
-- Use direct quotes where possible
-
-HANDLING MISSING INFORMATION
-- If information is missing, declare it explicitly
-
-BEGIN STRUCTURED RESPONSE
+If a topic appears in multiple documents, show evidence from each.
+If information is not found: [NOT FOUND IN DOCUMENTS]
 ```
 
 **Result:**
-- Clear separation between study content and general knowledge
-- Explicit citations prevent hallucinations
+- Organized by themes rather than flat list
+- Cross-document connections highlighted
 - Missing information flagged transparently
 
 ## Configuration

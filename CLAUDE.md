@@ -95,7 +95,7 @@ Guidelines template is in `src/tools/templates/structuring-guidelines.ts`.
 
 1. Check saved cookies in `browser_state/state.json`
 2. Validate cookie expiry (critical cookies: SID, HSID, etc.)
-3. If invalid: auto-auth if Chrome closed, else prompt user
+3. If invalid: auto-auth (works even if Chrome is already running)
 4. Persist to both state file AND Chrome profile directory
 
 ### Session Management

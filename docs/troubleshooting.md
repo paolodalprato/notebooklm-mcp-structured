@@ -29,10 +29,6 @@
 
 ## Authentication Issues
 
-### Chrome must be closed
-- **Symptom**: "Please close Chrome before authentication setup"
-- **Fix**: Close ALL Chrome/Chromium windows, then retry `setup_auth`
-
 ### Auto-auth not triggering
 - **Symptom**: `ask_question` fails without opening login
 - **Fix**: Run `get_health` first to check status, then `setup_auth` manually
@@ -44,11 +40,8 @@
 ### Fresh start / Deep cleanup
 If you're experiencing persistent issues, corrupted data, or want to start completely fresh:
 
-**⚠️ CRITICAL: Close ALL Chrome/Chromium instances before cleanup!** Open browsers can prevent cleanup and cause issues.
-
 **Recommended workflow:**
-1. Close all Chrome/Chromium windows and instances
-2. Ask: "Run NotebookLM cleanup and preserve my library"
+1. Ask: "Run NotebookLM cleanup and preserve my library"
 3. Review the preview - you'll see exactly what will be deleted
 4. Confirm deletion
 5. Re-authenticate: "Open NotebookLM auth setup"
@@ -78,10 +71,9 @@ If you're experiencing persistent issues, corrupted data, or want to start compl
 **Quick fix:** Ask the agent to repair authentication; it will run `get_health` → `setup_auth` → `get_health`.
 
 **For persistent auth failures:**
-1. Close ALL Chrome/Chromium instances
-2. Ask: "Run NotebookLM cleanup with library preservation"
-3. After cleanup completes, ask: "Open NotebookLM auth setup"
-4. This creates a completely fresh browser session while keeping your notebooks
+1. Ask: "Run NotebookLM cleanup with library preservation"
+2. After cleanup completes, ask: "Open NotebookLM auth setup"
+3. This creates a completely fresh browser session while keeping your notebooks
 
 **Auto-login (optional):**
 - Set `AUTO_LOGIN_ENABLED=true` with `LOGIN_EMAIL`, `LOGIN_PASSWORD` environment variables

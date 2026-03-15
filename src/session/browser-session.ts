@@ -401,7 +401,7 @@ export class BrowserSession {
       await sendProgress?.("Typing question with human-like behavior...", 2, 5);
       await humanType(page, inputSelector, question, {
         withTypos: true,
-        wpm: Math.max(CONFIG.typingWpmMin, CONFIG.typingWpmMax),
+        wpm: CONFIG.typingWpmMin + Math.floor(Math.random() * (CONFIG.typingWpmMax - CONFIG.typingWpmMin + 1)),
       });
 
       // Small pause before submitting

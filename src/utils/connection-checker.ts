@@ -42,7 +42,7 @@ export interface ConnectionCheckResult {
  *
  * Verifies that the MCP can connect to NotebookLM by checking:
  * 1. Authentication state validity
- * 2. Chrome browser status (must be closed for auth)
+ * 2. Chrome browser status (informational only, does NOT block auth)
  */
 export class ConnectionChecker {
   private authManager: AuthManager;
@@ -155,85 +155,17 @@ export class ConnectionChecker {
 
     log.warning("  ⚠️  Authentication state is invalid or expired");
 
-    // Step 2: Auth is invalid - check if Chrome is running
-    const chromeRunning = await this.isChromeRunning();
-
-    if (chromeRunning) {
-      // Chrome is running - user must close it first
-      log.warning("  🚫 Chrome is running - cannot proceed with authentication");
-      return {
-        isReady: false,
-        authValid: false,
-        chromeRunning: true,
-        message: "Authentication required but Chrome is running",
-        requiresUserAction: true,
-        userActionMessage:
-          "⚠️ **NotebookLM Authentication Required**\n\n" +
-          "To proceed, you must first **close Chrome completely** " +
-          "(all windows).\n\n" +
-          "This is necessary because authentication requires exclusive access " +
-          "to the Chrome profile.\n\n" +
-          "**What to do:**\n" +
-          "1. Close all Chrome windows\n" +
-          "2. Confirm here when done\n" +
-          "3. A window will open for Google login\n\n" +
-          "⏱️ Timeout: 1 minute",
-        canAutoAuth: false,
-      };
-    }
-
-    // Chrome is not running - can proceed with auto-auth
-    log.info("  ✅ Chrome is not running - can proceed with authentication");
+    // Step 2: Auth is invalid - proceed with auto-auth
+    // Chrome running status is informational only, does not block authentication
+    log.info("  🔐 Ready to proceed with authentication");
     return {
       isReady: false,
       authValid: false,
       chromeRunning: false,
-      message: "Authentication required - Chrome is closed, ready for login",
+      message: "Authentication required - ready for login",
       requiresUserAction: false,
       canAutoAuth: true,
     };
   }
 
-  /**
-   * Wait for user to close Chrome (with timeout)
-   *
-   * This method polls for Chrome status until either:
-   * - Chrome is closed (returns true)
-   * - Timeout is reached (returns false)
-   *
-   * @param timeoutMs Maximum time to wait in milliseconds (default: 60000 = 1 minute)
-   * @param pollIntervalMs How often to check in milliseconds (default: 2000 = 2 seconds)
-   * @returns true if Chrome was closed within timeout, false otherwise
-   */
-  async waitForChromeClose(
-    timeoutMs: number = 60000,
-    pollIntervalMs: number = 2000
-  ): Promise<boolean> {
-    log.info(`  ⏳ Waiting for Chrome to close (timeout: ${timeoutMs / 1000}s)...`);
-
-    const startTime = Date.now();
-    const endTime = startTime + timeoutMs;
-
-    while (Date.now() < endTime) {
-      const chromeRunning = await this.isChromeRunning();
-
-      if (!chromeRunning) {
-        log.success("  ✅ Chrome is now closed");
-        return true;
-      }
-
-      // Wait before next check
-      await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
-
-      // Log progress every 10 seconds
-      const elapsed = Date.now() - startTime;
-      if (elapsed % 10000 < pollIntervalMs) {
-        const remaining = Math.ceil((endTime - Date.now()) / 1000);
-        log.info(`  ⏳ Still waiting for Chrome to close (${remaining}s remaining)...`);
-      }
-    }
-
-    log.warning("  ⏱️  Timeout waiting for Chrome to close");
-    return false;
-  }
 }

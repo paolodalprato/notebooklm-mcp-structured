@@ -19,11 +19,11 @@ This fork automatically structures your questions before sending them to Noteboo
 ### Question Types (Auto-Detected)
 | Type | Trigger Words | Output Structure |
 |------|--------------|------------------|
-| Comparison | "compare", "vs", "difference" | Elements, Similarities, Differences, Synthesis |
-| List | "list", "identify", "which" | Numbered items with descriptions and sources |
-| Analysis | "analyze", "examine", "evaluate" | Subject, Observations, Evidence, Conclusions |
-| Explanation | "explain", "why", "how" | Concept, Answer, Examples, Related info |
-| Extraction | (default) | Data points with quotes and sources |
+| Comparison | "compare", "vs", "difference" | Points of comparison, similarities/differences with evidence, cross-references |
+| List | "list", "identify", "which" | Thematic topics with descriptions, evidence, cross-document connections |
+| Analysis | "analyze", "examine", "evaluate" | Thematic topics with cross-document connections and evidence |
+| Explanation | "explain", "why", "how" | Core concept, examples, related concepts, limitations |
+| Extraction | (default) | Thematic topics with descriptions, evidence, cross-document connections |
 
 ### Customizing Structuring Guidelines
 The guidelines are embedded in `src/tools/definitions/ask-question.ts`. To customize:
