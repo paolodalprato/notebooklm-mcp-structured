@@ -29,6 +29,17 @@ import type { ProgressCallback } from "../types.js";
 /**
  * Critical cookie names for Google authentication
  */
+/**
+ * Google migrated NotebookLM from notebooklm.google.com to notebook.google.com.
+ * Accept both to stay compatible during the transition.
+ */
+function isNotebookLmUrl(url: string): boolean {
+  return (
+    url.startsWith("https://notebooklm.google.com/") ||
+    url.startsWith("https://notebook.google.com/")
+  );
+}
+
 const CRITICAL_COOKIE_NAMES = [
   "SID",
   "HSID",
@@ -319,7 +330,7 @@ export class AuthManager {
           }
 
           // ✅ SIMPLE: Check if we're on NotebookLM (any path!)
-          if (currentUrl.startsWith("https://notebooklm.google.com/")) {
+          if (isNotebookLmUrl(currentUrl)) {
             await sendProgress?.("Login successful! NotebookLM detected!", 9, 10);
             log.success("✅ Login successful! NotebookLM URL detected.");
             log.success(`✅ Current URL: ${currentUrl}`);
@@ -343,7 +354,7 @@ export class AuthManager {
 
       // Timeout reached - final check
       const currentUrl = page.url();
-      if (currentUrl.startsWith("https://notebooklm.google.com/")) {
+      if (isNotebookLmUrl(currentUrl)) {
         await sendProgress?.("Login successful (detected on timeout check)!", 9, 10);
         log.success("✅ Login successful (detected on timeout check)");
         return true;
@@ -495,7 +506,7 @@ export class AuthManager {
       } else {
         log.error(`  ❌ Stuck on Google accounts page: ${currentUrl.slice(0, 80)}...`);
       }
-    } else if (currentUrl.includes("notebooklm.google.com")) {
+    } else if (currentUrl.includes("notebooklm.google.com") || currentUrl.includes("notebook.google.com")) {
       log.warning("  ⚠️  Reached NotebookLM but couldn't detect successful login");
       log.info("  💡 This might be a timing issue - try again");
     } else {
@@ -526,7 +537,7 @@ export class AuthManager {
         const currentUrl = page.url();
 
         // Simple check: Are we on NotebookLM?
-        if (currentUrl.startsWith("https://notebooklm.google.com/")) {
+        if (isNotebookLmUrl(currentUrl)) {
           log.success("    ✅ NotebookLM URL detected!");
           // Short wait to ensure page is loaded
           await page.waitForTimeout(2000);
@@ -557,7 +568,7 @@ export class AuthManager {
         const currentUrl = page.url();
 
         // Simple check: Are we on NotebookLM?
-        if (currentUrl.startsWith("https://notebooklm.google.com/")) {
+        if (isNotebookLmUrl(currentUrl)) {
           log.success("  ✅ NotebookLM URL detected");
           return true;
         }
