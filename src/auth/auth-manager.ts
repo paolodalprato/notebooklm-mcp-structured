@@ -129,9 +129,9 @@ export class AuthManager {
       return null;
     }
 
-    if (await this.isStateExpired()) {
-      log.warning("⚠️  Saved state is expired (>24h old)");
-      log.info("💡 Run setup_auth tool to re-authenticate");
+    if (!(await this.stateFileHasValidCookies())) {
+      log.warning("⚠️  Saved state has no valid critical cookies");
+      log.info("💡 Login will be attempted reusing the persistent profile");
       return null;
     }
 
@@ -249,23 +249,23 @@ export class AuthManager {
   }
 
   /**
-   * Check if the saved state file is too old (>24 hours)
+   * Check cookie validity by reading state.json directly (no browser needed).
+   * Valid = at least one critical cookie present and none of them expired.
+   * Session cookies (expires === -1) are treated as valid.
    */
-  async isStateExpired(): Promise<boolean> {
+  private async stateFileHasValidCookies(): Promise<boolean> {
     try {
-      const stats = await fs.stat(this.stateFilePath);
-      const fileAgeSeconds = (Date.now() - stats.mtimeMs) / 1000;
-      const maxAgeSeconds = 24 * 60 * 60; // 24 hours
-
-      if (fileAgeSeconds > maxAgeSeconds) {
-        const hoursOld = fileAgeSeconds / 3600;
-        log.warning(`⚠️  Saved state is ${hoursOld.toFixed(1)}h old (max: 24h)`);
-        return true;
+      const raw = await fs.readFile(this.stateFilePath, { encoding: "utf-8" });
+      const state = JSON.parse(raw);
+      const cookies: Array<{ name: string; expires?: number }> = state.cookies ?? [];
+      const critical = cookies.filter((c) => CRITICAL_COOKIE_NAMES.includes(c.name));
+      if (critical.length === 0) {
+        return false;
       }
-
-      return false;
+      const now = Date.now() / 1000;
+      return critical.every((c) => (c.expires ?? -1) === -1 || c.expires! > now);
     } catch {
-      return true; // File doesn't exist = expired
+      return false;
     }
   }
 
@@ -916,10 +916,11 @@ export class AuthManager {
     const shouldShowBrowser = overrideHeadless !== undefined ? overrideHeadless : true;
 
     try {
-      // CRITICAL: Clear ALL old auth data FIRST (for account switching)
-      log.info("🔄 Preparing for new account authentication...");
-      await sendProgress?.("Clearing old authentication data...", 1, 10);
-      await this.clearAllAuthData();
+      // NOTE: no data clearing here. The persistent profile is reused, so an
+      // expired state often resolves with a one-click account re-selection.
+      // Full wipe remains available via re_auth and cleanup_data (explicit).
+      log.info("🔄 Starting interactive authentication (reusing persistent profile)...");
+      await sendProgress?.("Preparing authentication...", 1, 10);
 
       log.info("🚀 Launching persistent browser for interactive setup...");
       log.info(`  📍 Profile: ${CONFIG.chromeProfileDir}`);
@@ -932,6 +933,9 @@ export class AuthManager {
         {
           headless: !shouldShowBrowser, // Use override or default to visible for setup
           channel: "chrome" as const,
+          // Keep the Chromium sandbox enabled: Patchright adds --no-sandbox unless
+          // this is explicitly true, and Chrome shows a warning bar for that flag.
+          chromiumSandbox: true,
           viewport: CONFIG.viewport,
           locale: "en-US",
           timezoneId: "Europe/Berlin",

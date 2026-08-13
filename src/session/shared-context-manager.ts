@@ -155,6 +155,9 @@ export class SharedContextManager {
     const launchOptions = {
       headless: shouldBeHeadless,
       channel: "chrome" as const,
+      // Keep the Chromium sandbox enabled: Patchright adds --no-sandbox unless
+      // this is explicitly true, and Chrome shows a warning bar for that flag.
+      chromiumSandbox: true,
       viewport: CONFIG.viewport,
       locale: "en-US",
       timezoneId: "Europe/Berlin",

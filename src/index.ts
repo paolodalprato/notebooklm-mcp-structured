@@ -42,6 +42,8 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
+  ListPromptsRequestSchema,
+  GetPromptRequestSchema,
   Tool,
 } from "@modelcontextprotocol/sdk/types.js";
 
@@ -129,6 +131,50 @@ class NotebookLMMCPServer {
       log.info("📋 [MCP] list_tools request received");
       return {
         tools: this.toolDefinitions,
+      };
+    });
+
+    // Prompts capability is declared at init, so these handlers must exist
+    // (clients like Claude Desktop call prompts/list and got -32601 before).
+    const prompts = [
+      {
+        name: "notebooklm.auth-setup",
+        description: "First-time Google login for NotebookLM access",
+        text:
+          "Run the setup_auth tool (show_browser=true). A browser window opens: " +
+          "ask the user to complete the Google login within 10 minutes, " +
+          "then verify with get_health that authenticated is true.",
+      },
+      {
+        name: "notebooklm.auth-repair",
+        description: "Recover from expired or failing NotebookLM authentication",
+        text:
+          "Authentication is failing. Proceed in order: " +
+          "1) get_health to inspect the current state. " +
+          "2) If authenticated=false, run setup_auth (show_browser=true) and let the user complete the login. " +
+          "The persistent profile is reused, so this is often a one-click re-selection. " +
+          "3) If the browser fails to launch and get_health reports chrome_running=true, ask the user to close " +
+          "Chrome windows left from previous automation runs, then retry. " +
+          "4) Only as a last resort, and after telling the user it wipes cookies and browser profile, " +
+          "propose cleanup_data (the notebook library is preserved).",
+      },
+    ];
+
+    this.server.setRequestHandler(ListPromptsRequestSchema, async () => {
+      log.info("💬 [MCP] list_prompts request received");
+      return {
+        prompts: prompts.map(({ name, description }) => ({ name, description })),
+      };
+    });
+
+    this.server.setRequestHandler(GetPromptRequestSchema, async (request) => {
+      const prompt = prompts.find((p) => p.name === request.params.name);
+      if (!prompt) {
+        throw new Error(`Unknown prompt: ${request.params.name}`);
+      }
+      return {
+        description: prompt.description,
+        messages: [{ role: "user", content: { type: "text", text: prompt.text } }],
       };
     });
 
@@ -400,7 +446,7 @@ class NotebookLMMCPServer {
     await this.server.connect(transport);
 
     log.success("✅ MCP Server connected via stdio");
-    log.success("🎉 Ready to receive requests from Claude Code!");
+    log.success("🎉 Ready to receive MCP requests!");
     log.info("");
     log.info("💡 Available tools:");
     for (const tool of this.toolDefinitions) {
