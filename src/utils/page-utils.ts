@@ -190,6 +190,14 @@ export async function waitForLatestAnswer(
     pollIntervalMs?: number;
     ignoreTexts?: string[];
     debug?: boolean;
+    /**
+     * Called every progressIntervalMs while waiting, so the caller can prove
+     * to its client that the operation is alive. A wait can last minutes, and
+     * silence is indistinguishable from a hang.
+     * ratio goes from 0 to 1 as the deadline approaches.
+     */
+    onProgress?: (elapsedSeconds: number, ratio: number) => void | Promise<void>;
+    progressIntervalMs?: number;
   } = {}
 ): Promise<string | null> {
   const {
@@ -198,9 +206,13 @@ export async function waitForLatestAnswer(
     pollIntervalMs = 1000,
     ignoreTexts = [],
     debug = false,
+    onProgress,
+    progressIntervalMs = 15000,
   } = options;
 
-  const deadline = Date.now() + timeoutMs;
+  const startedAt = Date.now();
+  let lastProgressAt = startedAt;
+  const deadline = startedAt + timeoutMs;
   const sanitizedQuestion = question.trim().toLowerCase();
 
   // Track ALL known texts as HASHES (memory efficient!)
@@ -224,6 +236,20 @@ export async function waitForLatestAnswer(
 
   while (Date.now() < deadline) {
     pollCount++;
+
+    // Heartbeat: tell the caller we are still alive, at a human pace.
+    if (onProgress) {
+      const now = Date.now();
+      if (now - lastProgressAt >= progressIntervalMs) {
+        lastProgressAt = now;
+        const elapsedMs = now - startedAt;
+        try {
+          await onProgress(Math.round(elapsedMs / 1000), Math.min(1, elapsedMs / timeoutMs));
+        } catch {
+          // A failing progress channel must never abort the wait.
+        }
+      }
+    }
 
     // No separate "thinking" indicator is needed: while Gemini is generating,
     // the response container holds only the reasoning block, which

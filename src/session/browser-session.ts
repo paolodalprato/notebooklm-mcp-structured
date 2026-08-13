@@ -424,6 +424,15 @@ export class BrowserSession {
         pollIntervalMs: 1000,
         ignoreTexts: existingResponses,
         debug: false,
+        // Keep the client informed: this wait can last minutes, and progress
+        // must keep increasing, so it creeps from step 3 towards step 4.
+        onProgress: async (elapsedSeconds, ratio) => {
+          await sendProgress?.(
+            `Waiting for the answer... (${elapsedSeconds}s elapsed)`,
+            3 + ratio * 0.9,
+            5
+          );
+        },
       });
 
       if (!answer) {
