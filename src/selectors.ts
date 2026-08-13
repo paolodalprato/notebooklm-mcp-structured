@@ -56,6 +56,17 @@ export const RESPONSE_TEXT_CONTENT = ".message-text-content";
 export const THOUGHTS_ELEMENT = "thinking-chain-view";
 
 /**
+ * Action buttons (copy, rate) attached to a finished answer.
+ *
+ * Measured on 2026-08-13: they appear in the response container at the exact
+ * moment generation ends, while the answer is streaming they are absent.
+ * That makes them the completion signal. The send button also flips from
+ * "stop generating" back to "send" at the same instant, but its label is
+ * translated, so it cannot be matched reliably across languages.
+ */
+export const RESPONSE_COMPLETE_MARKER = ".message-actions";
+
+/**
  * Fallback selectors for finding assistant responses
  * Ordered by specificity (most specific first)
  */

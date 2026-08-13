@@ -17,6 +17,7 @@ import {
   RESPONSE_TEXT_CONTENT,
   RESPONSE_SELECTORS,
   THOUGHTS_ELEMENT,
+  RESPONSE_COMPLETE_MARKER,
   JS_EVAL_SELECTORS,
   JS_CONTAINER_SELECTOR,
 } from "../selectors.js";
@@ -58,20 +59,30 @@ function hashString(str: string): number {
 
 /**
  * Read every assistant answer currently on the page, with Gemini's reasoning
- * block stripped out.
+ * block stripped out, and say whether each one is finished.
  *
  * The reasoning block sits inside the same container as the answer, so reading
  * the container wholesale would return the reasoning glued to the answer, and
  * would return reasoning ONLY while generation is still running. Both cases
  * break source fidelity, which is the reason this fork exists.
  *
- * An answer still being generated yields no text and is left out, so an empty
- * result means "not ready yet" and callers can simply keep polling.
+ * Stripping the reasoning is not enough on its own. In the first seconds the
+ * container holds status lines ("searching your documents...") that are plain
+ * blocks, not reasoning, and a caller waiting for stable text would take one
+ * of those for the answer. Hence `complete`, driven by the action buttons that
+ * only appear once generation ends.
+ *
+ * `markerSeen` reports whether the completion marker exists anywhere on the
+ * page. If Google renames that class, it disappears from finished answers too,
+ * and callers can fall back to text stability instead of waiting forever.
  */
-async function readAnswerTexts(page: Page): Promise<string[]> {
+async function readAnswers(page: Page): Promise<{
+  answers: Array<{ text: string; complete: boolean }>;
+  markerSeen: boolean;
+}> {
   return await page.evaluate(
-    ({ containerSel, textSel, thoughtsSel }) => {
-      const texts: string[] = [];
+    ({ containerSel, textSel, thoughtsSel, markerSel }) => {
+      const answers: Array<{ text: string; complete: boolean }> = [];
 
       for (const container of Array.from(document.querySelectorAll(containerSel))) {
         const node = container.querySelector(textSel) as HTMLElement | null;
@@ -94,15 +105,24 @@ async function readAnswerTexts(page: Page): Promise<string[]> {
           text = node.innerText || "";
         }
 
-        if (text.trim()) texts.push(text.trim());
+        if (text.trim()) {
+          answers.push({
+            text: text.trim(),
+            complete: container.querySelectorAll(markerSel).length > 0,
+          });
+        }
       }
 
-      return texts;
+      return {
+        answers,
+        markerSeen: document.querySelectorAll(markerSel).length > 0,
+      };
     },
     {
       containerSel: RESPONSE_CONTAINER_PRIMARY,
       textSel: RESPONSE_TEXT_CONTENT,
       thoughtsSel: THOUGHTS_ELEMENT,
+      markerSel: RESPONSE_COMPLETE_MARKER,
     }
   );
 }
@@ -126,7 +146,8 @@ export async function snapshotLatestResponse(page: Page): Promise<string | null>
  */
 export async function snapshotAllResponses(page: Page): Promise<string[]> {
   try {
-    const allTexts = await readAnswerTexts(page);
+    const { answers } = await readAnswers(page);
+    const allTexts = answers.map((a) => a.text);
     if (allTexts.length > 0) {
       log.info(`📸 [SNAPSHOT] Captured ${allTexts.length} existing responses`);
     }
@@ -340,7 +361,7 @@ async function extractLatestText(
     const containers = await page.$$(RESPONSE_CONTAINER_PRIMARY);
 
     if (containers.length > 0) {
-      const answers = await readAnswerTexts(page);
+      const { answers, markerSeen } = await readAnswers(page);
 
       if (debug && pollCount % 5 === 0) {
         log.dim(
@@ -349,20 +370,30 @@ async function extractLatestText(
       }
 
       let skipped = 0;
+      let pending = 0;
       for (let idx = 0; idx < answers.length; idx++) {
-        const text = answers[idx];
-        const textHash = hashString(text);
+        const answer = answers[idx];
+        const textHash = hashString(answer.text);
         if (!knownHashes.has(textHash)) {
+          // Still generating: status lines and half-written answers stay out.
+          // If the marker vanished from the whole page its selector is stale,
+          // so fall back to accepting text and let stability decide.
+          if (!answer.complete && markerSeen) {
+            pending++;
+            continue;
+          }
           log.success(
-            `✅ [EXTRACT] Found NEW text in container[${idx}]: ${text.length} chars`
+            `✅ [EXTRACT] Found NEW text in container[${idx}]: ${answer.text.length} chars`
           );
-          return text;
+          return answer.text;
         }
         skipped++;
       }
 
       if (debug && pollCount % 5 === 0) {
-        log.dim(`⏭️ [EXTRACT] No NEW text (skipped ${skipped} known)`);
+        log.dim(
+          `⏭️ [EXTRACT] No NEW complete text (skipped ${skipped} known, ${pending} still generating)`
+        );
       }
 
       // Never fall through while the real containers exist: the fallback
