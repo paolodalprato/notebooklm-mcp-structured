@@ -16,7 +16,7 @@ import {
   RESPONSE_CONTAINER_PRIMARY,
   RESPONSE_TEXT_CONTENT,
   RESPONSE_SELECTORS,
-  THINKING_INDICATOR,
+  THOUGHTS_ELEMENT,
   JS_EVAL_SELECTORS,
   JS_CONTAINER_SELECTOR,
 } from "../selectors.js";
@@ -56,6 +56,58 @@ function hashString(str: string): number {
 }
 
 
+/**
+ * Read every assistant answer currently on the page, with Gemini's reasoning
+ * block stripped out.
+ *
+ * The reasoning block sits inside the same container as the answer, so reading
+ * the container wholesale would return the reasoning glued to the answer, and
+ * would return reasoning ONLY while generation is still running. Both cases
+ * break source fidelity, which is the reason this fork exists.
+ *
+ * An answer still being generated yields no text and is left out, so an empty
+ * result means "not ready yet" and callers can simply keep polling.
+ */
+async function readAnswerTexts(page: Page): Promise<string[]> {
+  return await page.evaluate(
+    ({ containerSel, textSel, thoughtsSel }) => {
+      const texts: string[] = [];
+
+      for (const container of Array.from(document.querySelectorAll(containerSel))) {
+        const node = container.querySelector(textSel) as HTMLElement | null;
+        if (!node) continue;
+
+        const thoughts = node.querySelector(thoughtsSel);
+        let text = "";
+
+        if (thoughts && thoughts.parentElement) {
+          // Answer blocks are siblings of the reasoning block: collect them
+          // one by one and skip the reasoning itself.
+          const parts: string[] = [];
+          for (const child of Array.from(thoughts.parentElement.children)) {
+            if (child.matches(thoughtsSel)) continue;
+            const chunk = (child as HTMLElement).innerText || "";
+            if (chunk.trim()) parts.push(chunk.trim());
+          }
+          text = parts.join("\n\n");
+        } else {
+          text = node.innerText || "";
+        }
+
+        if (text.trim()) texts.push(text.trim());
+      }
+
+      return texts;
+    },
+    {
+      containerSel: RESPONSE_CONTAINER_PRIMARY,
+      textSel: RESPONSE_TEXT_CONTENT,
+      thoughtsSel: THOUGHTS_ELEMENT,
+    }
+  );
+}
+
+
 // ============================================================================
 // Main Functions
 // ============================================================================
@@ -73,32 +125,16 @@ export async function snapshotLatestResponse(page: Page): Promise<string | null>
  * Used to capture visible responses BEFORE submitting a new question
  */
 export async function snapshotAllResponses(page: Page): Promise<string[]> {
-  const allTexts: string[] = [];
-
   try {
-    const containers = await page.$$(RESPONSE_CONTAINER_PRIMARY);
-    if (containers.length > 0) {
-      for (const container of containers) {
-        try {
-          const textElement = await container.$(RESPONSE_TEXT_CONTENT);
-          if (textElement) {
-            const text = await textElement.innerText();
-            if (text && text.trim()) {
-              allTexts.push(text.trim());
-            }
-          }
-        } catch {
-          continue;
-        }
-      }
-
+    const allTexts = await readAnswerTexts(page);
+    if (allTexts.length > 0) {
       log.info(`📸 [SNAPSHOT] Captured ${allTexts.length} existing responses`);
     }
+    return allTexts;
   } catch (error) {
     log.warning(`⚠️ [SNAPSHOT] Failed to snapshot responses: ${error}`);
+    return [];
   }
-
-  return allTexts;
 }
 
 /**
@@ -189,22 +225,9 @@ export async function waitForLatestAnswer(
   while (Date.now() < deadline) {
     pollCount++;
 
-    // Check if NotebookLM is still "thinking" (most reliable indicator)
-    try {
-      const thinkingElement = await page.$(THINKING_INDICATOR);
-      if (thinkingElement) {
-        const isVisible = await thinkingElement.isVisible();
-        if (isVisible) {
-          if (debug && pollCount % 5 === 0) {
-            log.debug("🔍 [DEBUG] NotebookLM still thinking (div.thinking-message visible)...");
-          }
-          await page.waitForTimeout(pollIntervalMs);
-          continue;
-        }
-      }
-    } catch {
-      // Ignore errors checking thinking state
-    }
+    // No separate "thinking" indicator is needed: while Gemini is generating,
+    // the response container holds only the reasoning block, which
+    // readAnswerTexts() strips, so extraction yields nothing and we poll on.
 
     // Extract latest NEW text
     const candidate = await extractLatestText(
@@ -286,73 +309,46 @@ async function extractLatestText(
   debug: boolean,
   pollCount: number
 ): Promise<string | null> {
-  // Try the primary selector first (most specific for NotebookLM)
+  // Primary path: read the answers with the reasoning block stripped out.
   try {
     const containers = await page.$$(RESPONSE_CONTAINER_PRIMARY);
-    const totalContainers = containers.length;
-
-    // Early exit if no new containers possible
-    if (totalContainers <= knownHashes.size) {
-      if (debug && pollCount % 5 === 0) {
-        log.dim(
-          `⏭️ [EXTRACT] No new containers (${totalContainers} total, ${knownHashes.size} known)`
-        );
-      }
-      return null;
-    }
 
     if (containers.length > 0) {
-      // Only log every 5th poll to reduce noise
+      const answers = await readAnswerTexts(page);
+
       if (debug && pollCount % 5 === 0) {
         log.dim(
-          `🔍 [EXTRACT] Scanning ${totalContainers} containers (${knownHashes.size} known)`
+          `🔍 [EXTRACT] ${containers.length} containers, ${answers.length} with answer text (${knownHashes.size} known)`
         );
       }
 
       let skipped = 0;
-      let empty = 0;
-
-      // Scan ALL containers to find the FIRST with NEW text
-      for (let idx = 0; idx < containers.length; idx++) {
-        const container = containers[idx];
-        try {
-          const textElement = await container.$(RESPONSE_TEXT_CONTENT);
-          if (textElement) {
-            const text = await textElement.innerText();
-            if (text && text.trim()) {
-              // Hash-based comparison (faster & less memory)
-              const textHash = hashString(text.trim());
-              if (!knownHashes.has(textHash)) {
-                log.success(
-                  `✅ [EXTRACT] Found NEW text in container[${idx}]: ${text.trim().length} chars`
-                );
-                return text.trim();
-              } else {
-                skipped++;
-              }
-            } else {
-              empty++;
-            }
-          }
-        } catch {
-          continue;
+      for (let idx = 0; idx < answers.length; idx++) {
+        const text = answers[idx];
+        const textHash = hashString(text);
+        if (!knownHashes.has(textHash)) {
+          log.success(
+            `✅ [EXTRACT] Found NEW text in container[${idx}]: ${text.length} chars`
+          );
+          return text;
         }
+        skipped++;
       }
 
-      // Only log summary if debug enabled
       if (debug && pollCount % 5 === 0) {
-        log.dim(
-          `⏭️ [EXTRACT] No NEW text (skipped ${skipped} known, ${empty} empty)`
-        );
+        log.dim(`⏭️ [EXTRACT] No NEW text (skipped ${skipped} known)`);
       }
-      return null; // Don't fall through to fallback!
-    } else {
-      if (debug) {
-        log.warning("⚠️ [EXTRACT] No containers found");
-      }
+
+      // Never fall through while the real containers exist: the fallback
+      // selectors are generic and would happily return the reasoning block.
+      return null;
+    }
+
+    if (debug) {
+      log.warning("⚠️ [EXTRACT] No containers found");
     }
   } catch (error) {
-    log.error(`❌ [EXTRACT] Primary selector failed: ${error}`);
+    log.error(`❌ [EXTRACT] Primary extraction failed: ${error}`);
   }
 
   // Fallback: Try other selectors (only if primary selector failed/found nothing)

@@ -4,7 +4,7 @@
  * Centralizing all selectors makes it easier to update when NotebookLM changes its UI.
  * If NotebookLM updates break the MCP, check these selectors first.
  *
- * Last verified: 2024-01 (NotebookLM UI v2)
+ * Last verified: 2026-08 (Gemini Notebook UI, after the NotebookLM rename)
  */
 
 // ============================================================================
@@ -44,9 +44,16 @@ export const RESPONSE_CONTAINER_PRIMARY = ".to-user-container";
 export const RESPONSE_TEXT_CONTENT = ".message-text-content";
 
 /**
- * Selector for the thinking/loading indicator
+ * Gemini's reasoning block ("Thoughts").
+ *
+ * It lives INSIDE the response container, as a sibling of the answer blocks,
+ * and it stays there after generation ends. Two consequences:
+ * - while generating, it is the ONLY content of the container, so its text
+ *   must never be mistaken for the answer;
+ * - once done, it must be stripped from the captured text, because it is
+ *   Gemini's reasoning, not the grounded response.
  */
-export const THINKING_INDICATOR = "div.thinking-message";
+export const THOUGHTS_ELEMENT = "thinking-chain-view";
 
 /**
  * Fallback selectors for finding assistant responses
