@@ -32,7 +32,8 @@ npm-debug.log*
 screenshots/
 
 # Diagnostic output (may contain notebook content)
-scripts/chat-dom-dump.txt
+# scripts/ holds .mjs tools; anything they write out stays local.
+scripts/*.txt
 
 # Archives
 *.tar.gz
