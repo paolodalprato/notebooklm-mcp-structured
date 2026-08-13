@@ -37,3 +37,6 @@ scripts/*.txt
 
 # Archives
 *.tar.gz
+
+# Local backups of files modified during maintenance
+_backup-*/
