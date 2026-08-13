@@ -168,6 +168,12 @@ export const askQuestionTool: Tool = {
             type: "number",
             description: "Browser operation timeout in milliseconds (default: 30000)",
           },
+          response_timeout_ms: {
+            type: "number",
+            description:
+              "How long to wait for NotebookLM's answer, in milliseconds (default: 300000). " +
+              "Raise it for questions that ask for long, structured or exhaustive answers.",
+          },
           stealth: {
             type: "object",
             description: "Human-like behavior settings to avoid detection",

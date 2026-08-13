@@ -168,7 +168,9 @@ const DEFAULTS: Config = {
   preSubmitDelayMaxMs: 1000,
   postSubmitDelayMinMs: 1000,
   postSubmitDelayMaxMs: 1500,
-  responseTimeoutMs: 120000, // 2 minutes
+  // Gemini reasons before answering, and structured prompts produce long
+  // replies: 2 minutes was not enough for a 7.700-character answer.
+  responseTimeoutMs: 300000, // 5 minutes
   requiredStablePolls: 3,
 };
 
@@ -235,6 +237,7 @@ function applyEnvOverrides(config: Config): Config {
     cleanupInstancesOnShutdown: parseBoolean(process.env.NOTEBOOK_CLEANUP_ON_SHUTDOWN, config.cleanupInstancesOnShutdown),
     instanceProfileTtlHours: parseInteger(process.env.NOTEBOOK_INSTANCE_TTL_HOURS, config.instanceProfileTtlHours),
     instanceProfileMaxCount: parseInteger(process.env.NOTEBOOK_INSTANCE_MAX_COUNT, config.instanceProfileMaxCount),
+    responseTimeoutMs: parseInteger(process.env.RESPONSE_TIMEOUT_MS, config.responseTimeoutMs),
   };
 }
 
@@ -279,6 +282,8 @@ export interface BrowserOptions {
   show?: boolean;
   headless?: boolean;
   timeout_ms?: number;
+  /** How long to wait for the answer, per call. Raise it for heavy questions. */
+  response_timeout_ms?: number;
   stealth?: {
     enabled?: boolean;
     random_delays?: boolean;
@@ -319,6 +324,9 @@ export function applyBrowserOptions(
     }
     if (options.timeout_ms !== undefined) {
       config.browserTimeout = options.timeout_ms;
+    }
+    if (options.response_timeout_ms !== undefined) {
+      config.responseTimeoutMs = options.response_timeout_ms;
     }
     if (options.stealth) {
       const s = options.stealth;
