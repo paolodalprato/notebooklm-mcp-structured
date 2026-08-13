@@ -31,5 +31,8 @@ Thumbs.db
 npm-debug.log*
 screenshots/
 
+# Diagnostic output (may contain notebook content)
+scripts/chat-dom-dump.txt
+
 # Archives
 *.tar.gz
