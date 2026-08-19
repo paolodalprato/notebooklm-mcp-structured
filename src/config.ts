@@ -96,6 +96,7 @@ export interface Config {
   // Timing constants for browser operations
   navigationDelayMinMs: number;
   navigationDelayMaxMs: number;
+  notebookUrlTimeoutMs: number;
   chatInputTimeoutMs: number;
   chatInputFallbackTimeoutMs: number;
   preSubmitDelayMinMs: number;
@@ -162,8 +163,13 @@ const DEFAULTS: Config = {
   // Timing constants for browser operations
   navigationDelayMinMs: 2000,
   navigationDelayMaxMs: 3000,
-  chatInputTimeoutMs: 10000,
-  chatInputFallbackTimeoutMs: 5000,
+  // Un profilo Chrome freddo atterra prima su accounts.google.com e impiega
+  // decine di secondi a percorrere la catena di redirect di Google. Misurato
+  // il 20 agosto 2026: 39,8 s per arrivare a un campo di input utilizzabile su
+  // profilo vergine, e 24 s non sono bastati su un profilo isolato gia' caldo.
+  notebookUrlTimeoutMs: 60000,
+  chatInputTimeoutMs: 45000,
+  chatInputFallbackTimeoutMs: 10000,
   preSubmitDelayMinMs: 500,
   preSubmitDelayMaxMs: 1000,
   postSubmitDelayMinMs: 1000,
@@ -238,6 +244,8 @@ function applyEnvOverrides(config: Config): Config {
     instanceProfileTtlHours: parseInteger(process.env.NOTEBOOK_INSTANCE_TTL_HOURS, config.instanceProfileTtlHours),
     instanceProfileMaxCount: parseInteger(process.env.NOTEBOOK_INSTANCE_MAX_COUNT, config.instanceProfileMaxCount),
     responseTimeoutMs: parseInteger(process.env.RESPONSE_TIMEOUT_MS, config.responseTimeoutMs),
+    notebookUrlTimeoutMs: parseInteger(process.env.NOTEBOOK_URL_TIMEOUT_MS, config.notebookUrlTimeoutMs),
+    chatInputTimeoutMs: parseInteger(process.env.CHAT_INPUT_TIMEOUT_MS, config.chatInputTimeoutMs),
   };
 }
 

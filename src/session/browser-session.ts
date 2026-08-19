@@ -21,7 +21,7 @@ import {
   waitForLatestAnswer,
   snapshotAllResponses,
 } from "../utils/page-utils.js";
-import { CONFIG } from "../config.js";
+import { CONFIG, NOTEBOOK_HOST, isNotebookUrl } from "../config.js";
 import {
   CHAT_INPUT_SELECTORS,
   CHAT_INPUT_PRIMARY,
@@ -163,6 +163,27 @@ export class BrowserSession {
       throw new Error("Page not initialized");
     }
 
+    // The page may still be travelling through Google's redirect chain: a cold
+    // profile lands on accounts.google.com and only reaches the notebook tens
+    // of seconds later. Waiting for the selector alone measures the wrong
+    // thing, and reports a missing input when the page simply had not arrived.
+    if (!isNotebookUrl(this.page.url())) {
+      log.info(`  ⏳ Waiting to reach ${NOTEBOOK_HOST}...`);
+      try {
+        await this.page.waitForURL((url) => isNotebookUrl(url.toString()), {
+          timeout: CONFIG.notebookUrlTimeoutMs,
+        });
+        log.success(`  ✅ Reached ${NOTEBOOK_HOST}`);
+      } catch {
+        throw new Error(
+          `The page did not reach ${NOTEBOOK_HOST} within ` +
+          `${CONFIG.notebookUrlTimeoutMs} ms and is still on ${this.page.url()}. ` +
+          "Authentication is likely required: run the 'notebooklm.auth-setup' prompt, " +
+          "or raise NOTEBOOK_URL_TIMEOUT_MS if the connection is slow."
+        );
+      }
+    }
+
     try {
       // PRIMARY: Main chat input selector
       log.info(`  ⏳ Waiting for chat input (${CHAT_INPUT_SELECTORS[0]})...`);
@@ -184,14 +205,18 @@ export class BrowserSession {
         } catch (error) {
           log.error(`  ❌ NotebookLM interface not ready: ${error}`);
           throw new Error(
-            "Could not find NotebookLM chat input. " +
-            "Please ensure the notebook page has loaded correctly."
+            `Could not find the chat input on ${this.page.url()} after ` +
+            `${CONFIG.chatInputTimeoutMs + CONFIG.chatInputFallbackTimeoutMs} ms. ` +
+            "The page was reachable, so either the interface changed or it is still loading: " +
+            "raise CHAT_INPUT_TIMEOUT_MS, or check whether the selectors are still valid."
           );
         }
       } else {
         throw new Error(
-          "Could not find NotebookLM chat input. " +
-          "Please ensure the notebook page has loaded correctly."
+          `Could not find the chat input on ${this.page.url()} after ` +
+          `${CONFIG.chatInputTimeoutMs} ms. ` +
+          "The page was reachable, so either the interface changed or it is still loading: " +
+          "raise CHAT_INPUT_TIMEOUT_MS, or check whether the selectors are still valid."
         );
       }
     }
