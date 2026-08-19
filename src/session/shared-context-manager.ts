@@ -203,21 +203,38 @@ export class SharedContextManager {
       }
     } catch (e: any) {
       const msg = String(e?.message || e);
-      const isSingleton = /ProcessSingleton|SingletonLock|profile is already in use/i.test(msg);
-      if (strategy === "single" || !isSingleton) {
-        // hard fail
-        if (isSingleton && strategy === "single") {
-          log.error("❌ Chrome profile already in use and strategy=single. Close other instance or set NOTEBOOK_PROFILE_STRATEGY=auto/isolated.");
-        }
+
+      // A locked user-data-dir no longer announces itself. Chrome just dies
+      // (exit code 21) and Patchright reports "Target page, context or
+      // browser has been closed", so matching ProcessSingleton /
+      // SingletonLock / "profile is already in use" never fired. That left
+      // the fallback dead exactly when it was needed: Claude Desktop runs two
+      // server instances, one for chat and one for Cowork, and the second one
+      // to start could not open the browser at all.
+      //
+      // With strategy "auto" any launch failure now earns one retry on an
+      // isolated profile. The retry is still authenticated, because the
+      // cookies travel through storageState rather than the profile itself.
+      if (strategy === "single") {
+        log.error(
+          `❌ Chrome profile unavailable: ${msg}. Close the other instance, ` +
+          `or set NOTEBOOK_PROFILE_STRATEGY=auto to fall back automatically.`
+        );
         throw e;
       }
 
-      // auto strategy with lock → fall back to isolated instance dir
-      log.warning("⚠️  Base Chrome profile in use by another process. Falling back to isolated per-instance profile...");
-      const isolatedDir = await this.prepareIsolatedProfileDir(baseProfile);
-      this.globalContext = await tryLaunch(isolatedDir);
-      this.currentProfileDir = isolatedDir;
-      this.isIsolatedProfile = true;
+      log.warning(`⚠️  Base Chrome profile unavailable: ${msg}`);
+      log.info("  🔁 Retrying on an isolated per-instance profile...");
+      try {
+        const isolatedDir = await this.prepareIsolatedProfileDir(baseProfile);
+        this.globalContext = await tryLaunch(isolatedDir);
+        this.currentProfileDir = isolatedDir;
+        this.isIsolatedProfile = true;
+        log.success(`  ✅ Running on isolated profile: ${isolatedDir}`);
+      } catch (fallbackError) {
+        log.error(`❌ Isolated profile failed too: ${fallbackError}`);
+        throw e; // report the original failure, it is the informative one
+      }
     }
     this.contextCreatedAt = Date.now();
     this.currentHeadlessMode = shouldBeHeadless;
