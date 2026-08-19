@@ -79,12 +79,17 @@ class NotebookLMMCPServer {
       },
       {
         capabilities: {
+          // Declare only what this server actually implements. Two entries
+          // were removed on 2026-08-19:
+          // - resourceTemplates: not a capability at all. ServerCapabilities
+          //   allows experimental, logging, completions, prompts, resources,
+          //   tools and tasks; the key passed only because the schema is loose.
+          // - logging: never used here, and deprecated by the 2026-07-28 spec.
+          //   Declaring it invited requests this server cannot answer.
           tools: {},
           resources: {},
-          resourceTemplates: {},
           prompts: {},
           completions: {}, // Required for completion/complete support
-          logging: {},
         },
       }
     );
