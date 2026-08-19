@@ -367,6 +367,25 @@ export class CleanupManager {
   // ============================================================================
 
   /**
+   * True when removing `dir` would also remove the current data directory,
+   * where library.json lives. On Windows the manual legacy path
+   * %LOCALAPPDATA%\notebooklm-mcp is the *parent* of ...\notebooklm-mcp\Data,
+   * and on Linux and macOS the two coincide, so a recursive delete of a
+   * "legacy" path takes the library with it even when preserve_library is set.
+   */
+  private wouldRemoveLibrary(dir: string): boolean {
+    const norm = (p: string) =>
+      process.platform === "win32"
+        ? path.resolve(p).toLowerCase()
+        : path.resolve(p);
+    const target = norm(this.currentPaths.data);
+    const candidate = norm(dir);
+    if (candidate === target) return true;
+    const rel = path.relative(candidate, target);
+    return rel !== "" && !rel.startsWith("..") && !path.isAbsolute(rel);
+  }
+
+  /**
    * Get all paths that would be deleted for a given mode (with categorization)
    */
   async getCleanupPaths(
@@ -396,6 +415,10 @@ export class CleanupManager {
       ];
 
       for (const dir of legacyDirs) {
+        if (preserveLibrary && this.wouldRemoveLibrary(dir)) {
+          log.info(`  🛡️  Skipping ${dir}: removing it would delete library.json`);
+          continue;
+        }
         if (await this.pathExists(dir)) {
           const size = await this.getDirectorySize(dir);
           legacyPaths.push(dir);
@@ -408,6 +431,10 @@ export class CleanupManager {
       // and any paths that envPaths might miss
       const manualLegacyPaths = this.getManualLegacyPaths();
       for (const dir of manualLegacyPaths) {
+        if (preserveLibrary && this.wouldRemoveLibrary(dir)) {
+          log.info(`  🛡️  Skipping ${dir}: removing it would delete library.json`);
+          continue;
+        }
         if (await this.pathExists(dir) && !allPaths.has(dir)) {
           const size = await this.getDirectorySize(dir);
           legacyPaths.push(dir);
