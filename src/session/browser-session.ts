@@ -163,10 +163,11 @@ export class BrowserSession {
       throw new Error("Page not initialized");
     }
 
-    // The page may still be travelling through Google's redirect chain: a cold
-    // profile lands on accounts.google.com and only reaches the notebook tens
-    // of seconds later. Waiting for the selector alone measures the wrong
-    // thing, and reports a missing input when the page simply had not arrived.
+    // The page may still be on accounts.google.com. Waiting for the selector
+    // alone measures the wrong thing and blames the interface, so check the
+    // navigation first. Note that staying there is terminal, not slow: a
+    // Chrome profile without its own history cannot complete Google's sign-in
+    // from injected cookies, it needs a real login with two-step verification.
     if (!isNotebookUrl(this.page.url())) {
       log.info(`  ⏳ Waiting to reach ${NOTEBOOK_HOST}...`);
       try {
@@ -175,11 +176,22 @@ export class BrowserSession {
         });
         log.success(`  ✅ Reached ${NOTEBOOK_HOST}`);
       } catch {
+        const stuckOn = this.page.url();
+        if (stuckOn.includes("accounts.google.com")) {
+          throw new Error(
+            "This browser profile is not signed in to Google, and it cannot sign itself in: " +
+            "a fresh Chrome profile is treated as a new device and Google asks for the full " +
+            "login with two-step verification. This happens when another Claude surface " +
+            "(chat or Cowork) is already holding the main Chrome profile, so this one fell " +
+            "back to a throwaway profile. Wait for the other surface to go idle, or close " +
+            "its session, then try again. " +
+            `(stuck on ${stuckOn})`
+          );
+        }
         throw new Error(
           `The page did not reach ${NOTEBOOK_HOST} within ` +
-          `${CONFIG.notebookUrlTimeoutMs} ms and is still on ${this.page.url()}. ` +
-          "Authentication is likely required: run the 'notebooklm.auth-setup' prompt, " +
-          "or raise NOTEBOOK_URL_TIMEOUT_MS if the connection is slow."
+          `${CONFIG.notebookUrlTimeoutMs} ms and is still on ${stuckOn}. ` +
+          "Raise NOTEBOOK_URL_TIMEOUT_MS if the connection is slow."
         );
       }
     }

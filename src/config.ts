@@ -163,11 +163,12 @@ const DEFAULTS: Config = {
   // Timing constants for browser operations
   navigationDelayMinMs: 2000,
   navigationDelayMaxMs: 3000,
-  // Un profilo Chrome freddo atterra prima su accounts.google.com e impiega
-  // decine di secondi a percorrere la catena di redirect di Google. Misurato
-  // il 20 agosto 2026: 39,8 s per arrivare a un campo di input utilizzabile su
-  // profilo vergine, e 24 s non sono bastati su un profilo isolato gia' caldo.
-  notebookUrlTimeoutMs: 60000,
+  // La navigazione puo' passare da accounts.google.com per un istante. Se ci
+  // resta, il profilo non e' autenticato e nessuna attesa lo risolve: un
+  // profilo Chrome nuovo non si autentica con i soli cookie di state.json,
+  // Google pretende il login completo con verifica in due passaggi. Quindici
+  // secondi bastano al rimbalzo e non sprecano un minuto su una pagina ferma.
+  notebookUrlTimeoutMs: 15000,
   chatInputTimeoutMs: 45000,
   chatInputFallbackTimeoutMs: 10000,
   preSubmitDelayMinMs: 500,
