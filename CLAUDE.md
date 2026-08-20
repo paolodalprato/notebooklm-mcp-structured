@@ -166,4 +166,4 @@ Contents:
 
 ---
 
-*Last updated: 2026-08-20 after the singleton backend (Task 10).*
+*Development frozen as of 2026-08-20 — v1.1.0, MCP SDK 1.30.0 (latest for MCP protocol v1). Last updated: 2026-08-20.*
