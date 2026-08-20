@@ -1,5 +1,7 @@
 # Custom Modifications
 
+> **Scope note (2026-08-20):** this document describes the fork's core design — the client-side prompt structuring system — as of v1.0 (last revised March 2026). It does not cover later operational changes (the Gemini Notebook migration, the singleton backend); see [CHANGELOG.md](CHANGELOG.md) for those.
+
 This document details the custom modifications made to the original [notebooklm-mcp](https://github.com/PleasePrompto/notebooklm-mcp) project.
 
 ## Overview

@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-08-20
+
+Final release. Development is frozen and the repository is archived; future work continues in a successor project built on version 2 of the MCP protocol.
+
+### Added
+
+- **Singleton backend**: one shared browser process behind authenticated localhost Streamable HTTP; the stdio entry point became a transparent proxy, so concurrent Claude Desktop surfaces (Chat and Cowork) can query notebooks at the same time
+- Automatic backend discovery with spawn locking, version-skew handover, and reconnection with handshake replay when the backend dies mid-conversation
+- Unit tests (`npm run test:unit`) and a two-surface integration test (`npm run test:singleton`)
+- `NOTEBOOK_SINGLETON` and `NOTEBOOK_BACKEND_GRACE_MS` environment variables
+
+### Changed
+
+- Followed Google's July 2026 rename: NotebookLM is now **Gemini Notebook** at `notebook.google.com` (new host, new notebook URLs, redesigned answer UI, redirect chain handled)
+- Moved to MCP SDK 1.30.0, the latest release for version 1 of the MCP protocol
+- Answer extraction rewritten for the new Notebook UI; response wait raised to 5 minutes and made configurable
+- Prompt structuring guidelines rewritten (v3)
+
+### Fixed
+
+- Auth reliability: Chromium sandbox enabled, no more Chrome-blocking auth flow; a profile that cannot sign itself in now fails fast with an accurate message
+- Browser released when the last session ends and when a session fails to start, ending orphan Chrome processes and cross-surface profile contention
+
 ## [1.0.0] - 2025-01-27
 
 ### Added - Initial Release
