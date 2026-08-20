@@ -26,7 +26,6 @@ export class SessionManager {
   private sessions: Map<string, BrowserSession> = new Map();
   private maxSessions: number;
   private sessionTimeout: number;
-  private cleanupInterval?: NodeJS.Timeout;
 
   constructor(authManager: AuthManager) {
     this.authManager = authManager;
@@ -44,12 +43,14 @@ export class SessionManager {
       60,
       Math.min(Math.floor(this.sessionTimeout / 2), 300)
     );
-    this.cleanupInterval = setInterval(() => {
+    // Not kept on the instance: nothing ever cancels it, and unref() means it
+    // never keeps the process alive.
+    const cleanupTimer = setInterval(() => {
       this.cleanupInactiveSessions().catch((error) => {
         log.warning(`⚠️  Error during automatic session cleanup: ${error}`);
       });
     }, cleanupIntervalSeconds * 1000);
-    this.cleanupInterval.unref();
+    cleanupTimer.unref();
   }
 
   /**
@@ -176,6 +177,7 @@ export class SessionManager {
     log.success(
       `✅ Session ${sessionId} closed (${this.sessions.size}/${this.maxSessions} active)`
     );
+    await this.releaseContextIfIdle("last session closed");
     return true;
   }
 
@@ -245,6 +247,7 @@ export class SessionManager {
     log.success(
       `✅ Cleaned up ${inactiveSessions.length} sessions (${this.sessions.size}/${this.maxSessions} active)`
     );
+    await this.releaseContextIfIdle("all sessions expired");
     return inactiveSessions.length;
   }
 
@@ -283,14 +286,32 @@ export class SessionManager {
   }
 
   /**
+   * Release the shared browser when nothing is using it.
+   *
+   * Claude Desktop starts one server instance per surface, one for chat and
+   * one for Cowork, and they contend for the same Chrome profile. Whoever
+   * launched first used to hold it for the whole life of the process, so the
+   * other surface stayed broken until Claude Desktop was restarted. Closing
+   * the context as soon as the last session ends hands the profile over.
+   */
+  private async releaseContextIfIdle(reason: string): Promise<void> {
+    if (this.sessions.size > 0) return;
+    try {
+      await this.sharedContextManager.closeContext();
+      log.info(`  🔓 Browser released (${reason}); the Chrome profile is free for the other surface`);
+    } catch (error) {
+      log.warning(`  ⚠️  Could not release the browser: ${error}`);
+    }
+  }
+
+  /**
    * Close all sessions (used during shutdown)
    */
   async closeAllSessions(): Promise<void> {
-    if (this.cleanupInterval) {
-      clearInterval(this.cleanupInterval);
-      this.cleanupInterval = undefined;
-    }
-
+    // The cleanup timer is deliberately left running. It is unref'd, so it
+    // never keeps the process alive, and it returns immediately when the
+    // session map is empty. Clearing it here used to leave re_auth with a
+    // process whose periodic cleanup never came back.
     if (this.sessions.size === 0) {
       log.warning("🛑 Closing shared context (no active sessions)...");
       await this.sharedContextManager.closeContext();
