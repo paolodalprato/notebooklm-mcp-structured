@@ -35,36 +35,38 @@ export async function runProxy(): Promise<void> {
   let pumping = false;
   let pumpRequested = false;
   let reconnecting = false;
-  let replayResolve: (() => void) | null = null;
 
   const toClient = (m: AnyMessage): void => {
     void stdio.send(m as JSONRPCMessage).catch((e) => log.error(`❌ stdio send failed: ${e}`));
   };
 
   const fromBackend = (m: AnyMessage): void => {
-    if (m.id !== undefined && m.id !== null && isInternalId(m.id)) {
-      if (m.id === REPLAY_ID) {
-        replayResolve?.();
-        replayResolve = null;
-      }
-      return; // replay/ping answers stop here
-    }
+    // Ping answers stop here; replay answers never reach this shared handler
+    // at all — each connect() attempt intercepts its own REPLAY_ID reply on
+    // its own transport before the transport is published as `backend` (see
+    // connect() below), so a stale attempt's late answer can't land here.
+    if (m.id !== undefined && m.id !== null && isInternalId(m.id)) return;
     if (m.id !== undefined && m.id !== null && m.method === undefined) pendingIds.delete(m.id);
     toClient(m);
   };
 
-  // Synthesizes an error for every client request still in flight when the
-  // backend was lost, so the client (Claude) sees a rejected call it can
-  // retry instead of hanging forever waiting for a reply that will never come.
+  // Synthesizes an error only for ids that are truly in flight (sent to the
+  // dead backend, response lost) — NOT for ids still sitting unsent in
+  // `queue`, which the pump will deliver exactly once after reconnect.
+  // Erroring a still-queued id would double-execute it: -32603 now, a real
+  // (possibly costly, e.g. NotebookLM-quota-consuming) response later.
   const failPending = (): void => {
+    const queuedIds = new Set<string | number>();
+    for (const m of queue) if (m.id !== undefined && m.id !== null) queuedIds.add(m.id);
     for (const id of pendingIds) {
+      if (queuedIds.has(id)) continue; // unsent; keep tracking it in pendingIds until it's actually answered
       toClient({
         jsonrpc: "2.0",
         id,
         error: { code: -32603, message: "NotebookLM backend restarted — please retry the request" },
       } as AnyMessage);
+      pendingIds.delete(id); // this id's lifecycle is over; no real response is expected or wanted for it
     }
-    pendingIds.clear();
   };
 
   // Turns a lost backend into a fresh one: fail what was in flight, then
@@ -78,16 +80,23 @@ export async function runProxy(): Promise<void> {
     failPending();
     void (async () => {
       for (let attempt = 1; attempt <= RECONNECT_ATTEMPTS; attempt++) {
+        if (closingDown) return; // the client left while we were about to retry; stop quietly
         try {
           await connect(true);
+          // connect() itself tears down and returns without publishing if
+          // closingDown flipped true while it was working — don't celebrate
+          // a "reconnect" that was actually discarded.
+          if (closingDown) return;
           log.success(`✅ Reconnected to the backend (attempt ${attempt})`);
           reconnecting = false;
           return;
         } catch (error) {
+          if (closingDown) return;
           log.warning(`⚠️  Reconnect attempt ${attempt} failed: ${error}`);
           await new Promise((r) => setTimeout(r, RECONNECT_DELAY_MS * attempt));
         }
       }
+      if (closingDown) return;
       log.error("❌ Backend unreachable after retries; exiting");
       process.exit(1);
     })();
@@ -147,34 +156,74 @@ export async function runProxy(): Promise<void> {
     const transport = new StreamableHTTPClientTransport(new URL(`${url}/mcp`), {
       requestInit: { headers: { Authorization: `Bearer ${token}` } },
     });
-    transport.onmessage = (m) => fromBackend(m as AnyMessage);
+    // Transport-scoped handshake gate: until this attempt's own handshake
+    // (if any) completes, its REPLAY_ID answer is swallowed by the local
+    // closure below — never by the shared `fromBackend` — and everything
+    // else arriving early is dropped rather than forwarded, since this
+    // transport isn't published as `backend` yet. This makes each attempt's
+    // wait fully local: a slow/dead prior attempt's late REPLAY_ID answer
+    // has no shared state left to resolve, so it can never complete a LATER
+    // attempt's handshake wait.
+    let handshakeDone = false;
+    let localReplayResolve: (() => void) | null = null;
+    transport.onmessage = (m) => {
+      const msg = m as AnyMessage;
+      if (!handshakeDone) {
+        if (msg.id === REPLAY_ID) {
+          localReplayResolve?.();
+          localReplayResolve = null;
+        }
+        return;
+      }
+      fromBackend(msg);
+    };
     transport.onerror = (e) => log.warning(`⚠️  Backend transport error: ${e}`);
     transport.onclose = () => {
       if (backend === transport) onBackendLost("transport closed");
     };
-    await transport.start();
-    if (replay && initializeRequest) {
-      // Replay the original handshake on the fresh session before anything
-      // else flows, so the new backend sees the same initialize/initialized
-      // sequence a brand-new client connection would send. `backend` is
-      // deliberately not yet reassigned: any client message queued during
-      // this window stays queued (pump() sees `backend` still null/old) so
-      // nothing can jump ahead of the handshake on the new transport.
-      const done = new Promise<void>((resolve, reject) => {
-        const timer = setTimeout(() => {
-          replayResolve = null;
-          reject(new Error("handshake replay timed out"));
-        }, REPLAY_TIMEOUT_MS);
-        timer.unref();
-        replayResolve = () => {
-          clearTimeout(timer);
-          resolve();
-        };
-      });
-      await transport.send({ ...initializeRequest, id: REPLAY_ID } as JSONRPCMessage);
-      await done; // fromBackend swallows the response and resolves this
-      if (initializedNotification) await transport.send(initializedNotification as JSONRPCMessage);
+
+    try {
+      await transport.start();
+      if (replay && initializeRequest) {
+        // Replay the original handshake on the fresh session before anything
+        // else flows, so the new backend sees the same initialize/initialized
+        // sequence a brand-new client connection would send. `backend` is
+        // deliberately not yet reassigned: any client message queued during
+        // this window stays queued (pump() sees `backend` still null/old) so
+        // nothing can jump ahead of the handshake on the new transport.
+        const done = new Promise<void>((resolve, reject) => {
+          const timer = setTimeout(() => {
+            localReplayResolve = null;
+            reject(new Error("handshake replay timed out"));
+          }, REPLAY_TIMEOUT_MS);
+          timer.unref();
+          localReplayResolve = () => {
+            clearTimeout(timer);
+            resolve();
+          };
+        });
+        await transport.send({ ...initializeRequest, id: REPLAY_ID } as JSONRPCMessage);
+        await done; // this attempt's own onmessage above swallows the response and resolves this
+        if (initializedNotification) await transport.send(initializedNotification as JSONRPCMessage);
+      }
+    } catch (error) {
+      // A failed attempt must not leak a live, wired transport: close it so
+      // it can't keep sockets/heartbeats open behind the next attempt's
+      // fresh transport, and so any further message on it is simply gone.
+      await transport.close().catch(() => {});
+      throw error;
     }
+
+    if (closingDown) {
+      // The client disconnected while this attempt was in flight; don't
+      // publish a session nobody will use. Tear down what we just
+      // (re)established instead of leaving it as an orphan for the backend's
+      // TTL sweeper to eventually notice.
+      await transport.terminateSession().catch(() => {});
+      await transport.close().catch(() => {});
+      return;
+    }
+    handshakeDone = true;
     backend = transport;
     void pump();
   };
@@ -226,7 +275,9 @@ export async function runProxy(): Promise<void> {
     log.error(`❌ Cannot reach or start the shared backend: ${error}`);
     process.exit(1);
   }
-  log.success("✅ Proxy connected to the shared backend");
+  // connect() tears down and returns quietly without publishing if the
+  // client disconnected while this very first connect was in flight.
+  if (!closingDown) log.success("✅ Proxy connected to the shared backend");
 
   setInterval(() => {
     const t = backend;
