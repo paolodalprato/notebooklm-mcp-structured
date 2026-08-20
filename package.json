@@ -15,6 +15,7 @@
     "prepare": "npm run build",
     "test": "tsx src/index.ts",
     "test:unit": "tsx --test src/singleton/*.test.ts",
+    "test:singleton": "node scripts/test-singleton.mjs",
     "start": "node dist/index.js"
   },
   "keywords": [
