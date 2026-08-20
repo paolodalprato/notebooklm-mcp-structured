@@ -88,6 +88,10 @@ function spawnBackend(): void {
     windowsHide: true,
     env: process.env,
   });
+  // Without this, an async spawn failure (e.g. bad executable path) would
+  // throw uncaught and crash the proxy. Logging is enough: waitForBackend's
+  // timeout already produces the actionable error naming backend.log.
+  child.on("error", (error) => log.error(`❌ Failed to spawn backend: ${error}`));
   child.unref();
 }
 
