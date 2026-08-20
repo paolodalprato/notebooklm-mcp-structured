@@ -45,17 +45,29 @@ async function ping(info: SingletonInfo): Promise<{ ok: boolean; version: string
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** Pure decision so it can be unit-tested: what to do with a pinged backend. */
+export function decideOnHealth(
+  health: { ok: boolean; version: string } | null,
+  ownVersion: string
+): "connect" | "replace" | "unreachable" {
+  if (!health?.ok) return "unreachable";
+  return health.version === ownVersion ? "connect" : "replace";
+}
+
 /** A responding, version-matching backend — or null. Handles skew and stale files. */
 async function connectable(): Promise<SingletonInfo | null> {
   const info = await readInfo(CONFIG.dataDir);
   if (!info) return null;
   const health = await ping(info);
-  if (!health?.ok) {
+  const decision = decideOnHealth(health, SERVER_VERSION);
+
+  if (decision === "unreachable") {
     if (!isPidAlive(info.pid)) await removeInfo(CONFIG.dataDir); // stale file of a dead backend
     return null;
   }
-  if (health.version !== SERVER_VERSION) {
-    log.warning(`🔁 Backend version ${health.version} ≠ ${SERVER_VERSION}; asking it to exit...`);
+
+  if (decision === "replace") {
+    log.warning(`🔁 Backend version ${health!.version} ≠ ${SERVER_VERSION}; asking it to exit...`);
     try {
       await fetch(`http://127.0.0.1:${info.port}/shutdown`, {
         method: "POST",
@@ -69,13 +81,14 @@ async function connectable(): Promise<SingletonInfo | null> {
     while (Date.now() < deadline && isPidAlive(info.pid)) await sleep(POLL_MS);
     if (isPidAlive(info.pid)) {
       throw new Error(
-        `A backend of version ${health.version} (pid ${info.pid}) refuses to exit; ` +
+        `A backend of version ${health!.version} (pid ${info.pid}) refuses to exit; ` +
         `close it manually before using version ${SERVER_VERSION}.`
       );
     }
     await removeInfo(CONFIG.dataDir);
     return null;
   }
+
   return info;
 }
 
