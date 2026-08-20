@@ -2,6 +2,8 @@
 
 > **Project status (2026-08-20):** Development of notebooklm-mcp-structured is **frozen** as of this date and the repository is archived. The server is feature-complete and working: v1.1.0 ships the singleton backend (concurrent Claude Desktop surfaces share one browser) and is built on MCP SDK 1.30.0, the latest release for version 1 of the MCP protocol. The project remains available as-is; no further development is planned. Future work will continue in a successor project built on version 2 of the MCP protocol.
 
+> **Google renamed NotebookLM (July 2026):** the product is now **Gemini Notebook** and moved from `notebooklm.google.com` to **`notebook.google.com`**, with new notebook URLs and a redesigned UI. That change is what prompted the final revision cycle of this server: v1.1.0 targets the new host, the new answer UI, and Google's redirect chain. The project keeps its historical name.
+
 Enhanced MCP server for NotebookLM with **client-side prompt structuring** for **source fidelity**.
 
 > **Requirements:** This MCP server is designed to work with **Claude Desktop**. It requires Claude Desktop to be installed and configured to use MCP servers.
@@ -65,7 +67,7 @@ This dual-phase approach is designed to maintain document fidelity throughout th
 Since NotebookLM saves chat history in your notebooks, you can verify the entire process:
 
 1. **Ask a question** through Claude using this MCP
-2. **Open your notebook** on the NotebookLM web interface (https://notebooklm.google.com)
+2. **Open your notebook** on the Gemini Notebook web interface (https://notebook.google.com — formerly notebooklm.google.com)
 3. **View the saved chat** to see:
    - The **structured prompt** that Claude sent (via the MCP)
    - The **original NotebookLM response** with all internal reference links
