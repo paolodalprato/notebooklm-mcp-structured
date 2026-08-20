@@ -5,6 +5,10 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import envPaths from "env-paths";
 import fs from "node:fs";
 import path from "node:path";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+
+const execFileAsync = promisify(execFile);
 
 const GRACE_MS = 3000;
 const dataDir = envPaths("notebooklm-mcp", { suffix: "" }).data;
@@ -12,7 +16,43 @@ const infoPath = path.join(dataDir, "singleton.json");
 
 const fail = (msg) => { console.error(`FAIL: ${msg}`); process.exit(1); };
 const ok = (msg) => console.error(`ok: ${msg}`);
+const warn = (msg) => console.error(`warn: ${msg}`);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Counts OS processes that look like our spawned backend (`--backend` on a
+// `dist` entry point). Windows-only for now; on any other platform, or if
+// enumeration itself fails, this returns null and the caller skips the
+// assertion rather than failing the whole run over a tooling gap.
+async function countBackendProcesses() {
+  if (process.platform !== "win32") {
+    warn("backend process count check skipped (non-Windows platform)");
+    return null;
+  }
+  try {
+    // Filter by process Name first (WMI-side), not just CommandLine: a plain
+    // CommandLine-only filter would self-match this very enumeration command,
+    // since its own command line necessarily contains the literal substrings
+    // "--backend" and "dist" that it's searching for.
+    const { stdout } = await execFileAsync("powershell", [
+      "-NoProfile",
+      "-Command",
+      "@(Get-CimInstance -ClassName Win32_Process -Filter \"Name='node.exe'\" | " +
+        "Where-Object { $_.CommandLine -like '*--backend*' -and $_.CommandLine -like '*dist*' }).Count",
+    ]);
+    const n = Number.parseInt(stdout.trim(), 10);
+    return Number.isNaN(n) ? null : n;
+  } catch (e) {
+    warn(`backend process count check failed: ${e}`);
+    return null;
+  }
+}
+
+async function assertSingleBackend(label) {
+  const count = await countBackendProcesses();
+  if (count === null) return; // enumeration unsupported or failed; skip per plan
+  if (count !== 1) fail(`${label}: expected exactly 1 backend process, found ${count}`);
+  ok(`${label}: exactly 1 backend process running`);
+}
 
 async function startClient(name) {
   const transport = new StdioClientTransport({
@@ -33,6 +73,7 @@ ok("two proxies connected concurrently");
 // 2. Exactly one backend.
 const info = JSON.parse(fs.readFileSync(infoPath, "utf-8"));
 ok(`backend pid ${info.pid} on port ${info.port}`);
+await assertSingleBackend("scenario 2");
 
 // 3. Both clients see the tools, concurrently.
 const [ta, tb] = await Promise.all([a.listTools(), b.listTools()]);
@@ -59,9 +100,12 @@ process.kill(info.pid);
 await sleep(1000);
 const [ra, rb] = await Promise.all([listToolsWithRetry(a), listToolsWithRetry(b)]);
 if (!ra.tools.length || !rb.tools.length) fail("a surface did not recover after backend death");
+if (!ra.tools.some((t) => t.name === "ask_question")) fail("surface-a misses ask_question after recovery");
+if (!rb.tools.some((t) => t.name === "ask_question")) fail("surface-b misses ask_question after recovery");
 const reborn = JSON.parse(fs.readFileSync(infoPath, "utf-8"));
 if (reborn.pid === info.pid) fail("backend pid unchanged after kill?");
 ok(`both surfaces recovered on new backend pid ${reborn.pid}`);
+await assertSingleBackend("scenario 3b (post-recovery)");
 
 // 4. Close both; the backend must exit within TTL-free time (clean DELETE) + grace.
 // The proxy no longer forces process.exit() until its async cleanup and the

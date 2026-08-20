@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * NotebookLM MCP Structured v1.0.0
+ * NotebookLM MCP Structured v1.1.0
  *
  * Enhanced MCP Server for NotebookLM with client-side prompt structuring
  * for source fidelity in professional document analysis.
@@ -40,7 +40,7 @@
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 
 import { CliHandler } from "./utils/cli-handler.js";
-import { CONFIG } from "./config.js";
+import { CONFIG, SERVER_VERSION } from "./config.js";
 import { log } from "./utils/logger.js";
 import { ServerCore, createServerCore, createMcpServer } from "./server-core.js";
 
@@ -135,7 +135,7 @@ async function runDirect(): Promise<void> {
 function printBanner(): void {
   console.error("╔══════════════════════════════════════════════════════════╗");
   console.error("║                                                          ║");
-  console.error("║           NotebookLM MCP Server v1.0.0                   ║");
+  console.error(`║           NotebookLM MCP Server v${SERVER_VERSION}                   ║`);
   console.error("║                                                          ║");
   console.error("║   Chat with Gemini 2.5 through NotebookLM via MCP       ║");
   console.error("║                                                          ║");
