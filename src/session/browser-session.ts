@@ -181,10 +181,11 @@ export class BrowserSession {
           throw new Error(
             "This browser profile is not signed in to Google, and it cannot sign itself in: " +
             "a fresh Chrome profile is treated as a new device and Google asks for the full " +
-            "login with two-step verification. This happens when another Claude surface " +
-            "(chat or Cowork) is already holding the main Chrome profile, so this one fell " +
-            "back to a throwaway profile. Wait for the other surface to go idle, or close " +
-            "its session, then try again. " +
+            "login with two-step verification. The server falls back to a throwaway profile " +
+            "whenever the main one will not open, and the usual reason is that another Claude " +
+            "surface (chat or Cowork) is holding it; a Chrome that fails to start for any other " +
+            "reason lands here too. If another surface is working, wait for it to go idle and " +
+            "try again. " +
             `(stuck on ${stuckOn})`
           );
         }
