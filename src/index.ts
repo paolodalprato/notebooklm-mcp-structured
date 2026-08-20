@@ -37,432 +37,110 @@
  * See README.md for full documentation.
  */
 
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-  ListPromptsRequestSchema,
-  GetPromptRequestSchema,
-  Tool,
-} from "@modelcontextprotocol/sdk/types.js";
 
-import { AuthManager } from "./auth/auth-manager.js";
-import { SessionManager } from "./session/session-manager.js";
-import { NotebookLibrary } from "./library/notebook-library.js";
-import { ToolHandlers, buildToolDefinitions } from "./tools/index.js";
-import { ResourceHandlers } from "./resources/resource-handlers.js";
-import { SettingsManager } from "./utils/settings-manager.js";
 import { CliHandler } from "./utils/cli-handler.js";
-import { CONFIG, SERVER_VERSION } from "./config.js";
+import { CONFIG } from "./config.js";
 import { log } from "./utils/logger.js";
+import { ServerCore, createServerCore, createMcpServer } from "./server-core.js";
 
 /**
- * Main MCP Server Class
+ * Setup graceful shutdown handlers for a given server core.
  */
-class NotebookLMMCPServer {
-  private server: Server;
-  private authManager: AuthManager;
-  private sessionManager: SessionManager;
-  private library: NotebookLibrary;
-  private toolHandlers: ToolHandlers;
-  private resourceHandlers: ResourceHandlers;
-  private settingsManager: SettingsManager;
-  private toolDefinitions: Tool[];
+function installShutdownHandlers(core: ServerCore): void {
+  let shuttingDown = false;
 
-  constructor() {
-    // Initialize MCP Server
-    this.server = new Server(
-      {
-        name: "notebooklm-mcp",
-        version: SERVER_VERSION,
-      },
-      {
-        capabilities: {
-          // Declare only what this server actually implements. Two entries
-          // were removed on 2026-08-19:
-          // - resourceTemplates: not a capability at all. ServerCapabilities
-          //   allows experimental, logging, completions, prompts, resources,
-          //   tools and tasks; the key passed only because the schema is loose.
-          // - logging: never used here, and deprecated by the 2026-07-28 spec.
-          //   Declaring it invited requests this server cannot answer.
-          tools: {},
-          resources: {},
-          prompts: {},
-          completions: {}, // Required for completion/complete support
-        },
-      }
-    );
-
-    // Initialize managers
-    this.authManager = new AuthManager();
-    this.sessionManager = new SessionManager(this.authManager);
-    this.library = new NotebookLibrary();
-    this.settingsManager = new SettingsManager();
-    
-    // Initialize handlers
-    this.toolHandlers = new ToolHandlers(
-      this.sessionManager,
-      this.authManager,
-      this.library
-    );
-    this.resourceHandlers = new ResourceHandlers(this.library);
-
-    // Build and Filter tool definitions
-    const allTools = buildToolDefinitions(this.library) as Tool[];
-    this.toolDefinitions = this.settingsManager.filterTools(allTools);
-
-    // Setup handlers
-    this.setupHandlers();
-    this.setupShutdownHandlers();
-
-    const activeSettings = this.settingsManager.getEffectiveSettings();
-    log.info("🚀 NotebookLM MCP Server initialized");
-    log.info(`  Version: ${SERVER_VERSION}`);
-    log.info(`  Node: ${process.version}`);
-    log.info(`  Platform: ${process.platform}`);
-    log.info(`  Profile: ${activeSettings.profile} (${this.toolDefinitions.length} tools active)`);
-  }
-
-  /**
-   * Setup MCP request handlers
-   */
-  private setupHandlers(): void {
-    // Register Resource Handlers (Resources, Templates, Completions)
-    this.resourceHandlers.registerHandlers(this.server);
-
-    // List available tools
-    this.server.setRequestHandler(ListToolsRequestSchema, async () => {
-      log.info("📋 [MCP] list_tools request received");
-      return {
-        tools: this.toolDefinitions,
-      };
-    });
-
-    // Prompts capability is declared at init, so these handlers must exist
-    // (clients like Claude Desktop call prompts/list and got -32601 before).
-    const prompts = [
-      {
-        name: "notebooklm.auth-setup",
-        description: "First-time Google login for NotebookLM access",
-        text:
-          "Run the setup_auth tool (show_browser=true). A browser window opens: " +
-          "ask the user to complete the Google login within 10 minutes, " +
-          "then verify with get_health that authenticated is true.",
-      },
-      {
-        name: "notebooklm.auth-repair",
-        description: "Recover from expired or failing NotebookLM authentication",
-        text:
-          "Authentication is failing. Proceed in order: " +
-          "1) get_health to inspect the current state. " +
-          "2) If authenticated=false, run setup_auth (show_browser=true) and let the user complete the login. " +
-          "The persistent profile is reused, so this is often a one-click re-selection. " +
-          "3) If the browser fails to launch and get_health reports chrome_running=true, ask the user to close " +
-          "Chrome windows left from previous automation runs, then retry. " +
-          "4) Only as a last resort, and after telling the user it wipes cookies and browser profile, " +
-          "propose cleanup_data (the notebook library is preserved).",
-      },
-    ];
-
-    this.server.setRequestHandler(ListPromptsRequestSchema, async () => {
-      log.info("💬 [MCP] list_prompts request received");
-      return {
-        prompts: prompts.map(({ name, description }) => ({ name, description })),
-      };
-    });
-
-    this.server.setRequestHandler(GetPromptRequestSchema, async (request) => {
-      const prompt = prompts.find((p) => p.name === request.params.name);
-      if (!prompt) {
-        throw new Error(`Unknown prompt: ${request.params.name}`);
-      }
-      return {
-        description: prompt.description,
-        messages: [{ role: "user", content: { type: "text", text: prompt.text } }],
-      };
-    });
-
-    // Handle tool calls
-    this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
-      const { name, arguments: args } = request.params;
-      const progressToken = (args as any)?._meta?.progressToken;
-
-      log.info(`🔧 [MCP] Tool call: ${name}`);
-      if (progressToken) {
-        log.info(`  📊 Progress token: ${progressToken}`);
-      }
-
-      // Create progress callback function
-      const sendProgress = async (message: string, progress?: number, total?: number) => {
-        if (progressToken) {
-          await this.server.notification({
-            method: "notifications/progress",
-            params: {
-              progressToken,
-              message,
-              ...(progress !== undefined && { progress }),
-              ...(total !== undefined && { total }),
-            },
-          });
-          log.dim(`  📊 Progress: ${message}`);
-        }
-      };
-
-      try {
-        let result;
-
-        switch (name) {
-          case "ask_question":
-            result = await this.toolHandlers.handleAskQuestion(
-              args as {
-                question: string;
-                session_id?: string;
-                notebook_id?: string;
-                notebook_url?: string;
-                show_browser?: boolean;
-              },
-              sendProgress
-            );
-            break;
-
-          case "add_notebook":
-            result = await this.toolHandlers.handleAddNotebook(
-              args as {
-                url: string;
-                name: string;
-                description: string;
-                topics: string[];
-                content_types?: string[];
-                use_cases?: string[];
-                tags?: string[];
-              }
-            );
-            break;
-
-          case "list_notebooks":
-            result = await this.toolHandlers.handleListNotebooks();
-            break;
-
-          case "get_notebook":
-            result = await this.toolHandlers.handleGetNotebook(
-              args as { id: string }
-            );
-            break;
-
-          case "select_notebook":
-            result = await this.toolHandlers.handleSelectNotebook(
-              args as { id: string }
-            );
-            break;
-
-          case "update_notebook":
-            result = await this.toolHandlers.handleUpdateNotebook(
-              args as {
-                id: string;
-                name?: string;
-                description?: string;
-                topics?: string[];
-                content_types?: string[];
-                use_cases?: string[];
-                tags?: string[];
-                url?: string;
-              }
-            );
-            break;
-
-          case "remove_notebook":
-            result = await this.toolHandlers.handleRemoveNotebook(
-              args as { id: string }
-            );
-            break;
-
-          case "search_notebooks":
-            result = await this.toolHandlers.handleSearchNotebooks(
-              args as { query: string }
-            );
-            break;
-
-          case "get_library_stats":
-            result = await this.toolHandlers.handleGetLibraryStats();
-            break;
-
-          case "list_sessions":
-            result = await this.toolHandlers.handleListSessions();
-            break;
-
-          case "close_session":
-            result = await this.toolHandlers.handleCloseSession(
-              args as { session_id: string }
-            );
-            break;
-
-          case "reset_session":
-            result = await this.toolHandlers.handleResetSession(
-              args as { session_id: string },
-              sendProgress
-            );
-            break;
-
-          case "get_health":
-            result = await this.toolHandlers.handleGetHealth();
-            break;
-
-          case "setup_auth":
-            result = await this.toolHandlers.handleSetupAuth(
-              args as { show_browser?: boolean },
-              sendProgress
-            );
-            break;
-
-          case "re_auth":
-            result = await this.toolHandlers.handleReAuth(
-              args as { show_browser?: boolean },
-              sendProgress
-            );
-            break;
-
-          case "cleanup_data":
-            result = await this.toolHandlers.handleCleanupData(
-              args as { confirm: boolean }
-            );
-            break;
-
-          default:
-            log.error(`❌ [MCP] Unknown tool: ${name}`);
-            return {
-              content: [
-                {
-                  type: "text",
-                  text: JSON.stringify(
-                    {
-                      success: false,
-                      error: `Unknown tool: ${name}`,
-                    },
-                    null,
-                    2
-                  ),
-                },
-              ],
-            };
-        }
-
-        // Return result
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(result, null, 2),
-            },
-          ],
-        };
-      } catch (error) {
-        const errorMessage =
-          error instanceof Error ? error.message : String(error);
-        log.error(`❌ [MCP] Tool execution error: ${errorMessage}`);
-
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(
-                {
-                  success: false,
-                  error: errorMessage,
-                },
-                null,
-                2
-              ),
-            },
-          ],
-        };
-      }
-    });
-  }
-
-  /**
-   * Setup graceful shutdown handlers
-   */
-  private setupShutdownHandlers(): void {
-    let shuttingDown = false;
-
-    const shutdown = async (signal: string) => {
-      if (shuttingDown) {
-        return;
-      }
-      shuttingDown = true;
-
-      log.info(`\n🛑 Received ${signal}, shutting down gracefully...`);
-
-      try {
-        // Cleanup tool handlers (closes all sessions)
-        await this.toolHandlers.cleanup();
-
-        // Close server
-        await this.server.close();
-
-        log.success("✅ Shutdown complete");
-        process.exit(0);
-      } catch (error) {
-        log.error(`❌ Error during shutdown: ${error}`);
-        process.exit(1);
-      }
-    };
-
-    const requestShutdown = (signal: string) => {
-      void shutdown(signal);
-    };
-
-    process.on("SIGINT", () => requestShutdown("SIGINT"));
-    process.on("SIGTERM", () => requestShutdown("SIGTERM"));
-
-    process.on("uncaughtException", (error) => {
-      log.error(`💥 Uncaught exception: ${error}`);
-      log.error(error.stack || "");
-      requestShutdown("uncaughtException");
-    });
-
-    process.on("unhandledRejection", (reason, promise) => {
-      log.error(`💥 Unhandled rejection at: ${promise}`);
-      log.error(`Reason: ${reason}`);
-      requestShutdown("unhandledRejection");
-    });
-  }
-
-  /**
-   * Start the MCP server
-   */
-  async start(): Promise<void> {
-    log.info("🎯 Starting NotebookLM MCP Server...");
-    log.info("");
-    log.info("📝 Configuration:");
-    log.info(`  Config Dir: ${CONFIG.configDir}`);
-    log.info(`  Data Dir: ${CONFIG.dataDir}`);
-    log.info(`  Headless: ${CONFIG.headless}`);
-    log.info(`  Max Sessions: ${CONFIG.maxSessions}`);
-    log.info(`  Session Timeout: ${CONFIG.sessionTimeout}s`);
-    log.info(`  Stealth: ${CONFIG.stealthEnabled}`);
-    log.info("");
-
-    // Create stdio transport
-    const transport = new StdioServerTransport();
-
-    // Connect server to transport
-    await this.server.connect(transport);
-
-    log.success("✅ MCP Server connected via stdio");
-    log.success("🎉 Ready to receive MCP requests!");
-    log.info("");
-    log.info("💡 Available tools:");
-    for (const tool of this.toolDefinitions) {
-      const desc = tool.description ? tool.description.split('\n')[0] : 'No description'; // First line only
-      log.info(`  - ${tool.name}: ${desc.substring(0, 80)}...`);
+  const shutdown = async (signal: string) => {
+    if (shuttingDown) {
+      return;
     }
-    log.info("");
-    log.info("📖 For documentation, see: README.md");
-    log.info("📖 For MCP details, see: MCP_INFOS.md");
-    log.info("");
+    shuttingDown = true;
+
+    log.info(`\n🛑 Received ${signal}, shutting down gracefully...`);
+
+    try {
+      // Cleanup tool handlers (closes all sessions)
+      await core.toolHandlers.cleanup();
+
+      log.success("✅ Shutdown complete");
+      process.exit(0);
+    } catch (error) {
+      log.error(`❌ Error during shutdown: ${error}`);
+      process.exit(1);
+    }
+  };
+
+  const requestShutdown = (signal: string) => {
+    void shutdown(signal);
+  };
+
+  process.on("SIGINT", () => requestShutdown("SIGINT"));
+  process.on("SIGTERM", () => requestShutdown("SIGTERM"));
+
+  process.on("uncaughtException", (error) => {
+    log.error(`💥 Uncaught exception: ${error}`);
+    log.error(error.stack || "");
+    requestShutdown("uncaughtException");
+  });
+
+  process.on("unhandledRejection", (reason, promise) => {
+    log.error(`💥 Unhandled rejection at: ${promise}`);
+    log.error(`Reason: ${reason}`);
+    requestShutdown("unhandledRejection");
+  });
+}
+
+/**
+ * Run the server directly over stdio (single-client mode).
+ */
+async function runDirect(): Promise<void> {
+  const core = createServerCore();
+  installShutdownHandlers(core);
+  const server = createMcpServer(core);
+
+  log.info("🎯 Starting NotebookLM MCP Server...");
+  log.info("");
+  log.info("📝 Configuration:");
+  log.info(`  Config Dir: ${CONFIG.configDir}`);
+  log.info(`  Data Dir: ${CONFIG.dataDir}`);
+  log.info(`  Headless: ${CONFIG.headless}`);
+  log.info(`  Max Sessions: ${CONFIG.maxSessions}`);
+  log.info(`  Session Timeout: ${CONFIG.sessionTimeout}s`);
+  log.info(`  Stealth: ${CONFIG.stealthEnabled}`);
+  log.info("");
+
+  // Create stdio transport
+  const transport = new StdioServerTransport();
+
+  // Connect server to transport
+  await server.connect(transport);
+
+  log.success("✅ MCP Server connected via stdio");
+  log.success("🎉 Ready to receive MCP requests!");
+  log.info("");
+  log.info("💡 Available tools:");
+  for (const tool of core.toolDefinitions) {
+    const desc = tool.description ? tool.description.split('\n')[0] : 'No description'; // First line only
+    log.info(`  - ${tool.name}: ${desc.substring(0, 80)}...`);
   }
+  log.info("");
+  log.info("📖 For documentation, see: README.md");
+  log.info("📖 For MCP details, see: MCP_INFOS.md");
+  log.info("");
+}
+
+/**
+ * Print the startup banner to stderr.
+ */
+function printBanner(): void {
+  console.error("╔══════════════════════════════════════════════════════════╗");
+  console.error("║                                                          ║");
+  console.error("║           NotebookLM MCP Server v1.0.0                   ║");
+  console.error("║                                                          ║");
+  console.error("║   Chat with Gemini 2.5 through NotebookLM via MCP       ║");
+  console.error("║                                                          ║");
+  console.error("╚══════════════════════════════════════════════════════════╝");
+  console.error("");
 }
 
 /**
@@ -477,19 +155,11 @@ async function main() {
     process.exit(0);
   }
 
-  // Print banner
-  console.error("╔══════════════════════════════════════════════════════════╗");
-  console.error("║                                                          ║");
-  console.error("║           NotebookLM MCP Server v1.0.0                   ║");
-  console.error("║                                                          ║");
-  console.error("║   Chat with Gemini 2.5 through NotebookLM via MCP       ║");
-  console.error("║                                                          ║");
-  console.error("╚══════════════════════════════════════════════════════════╝");
-  console.error("");
+  printBanner();
 
   try {
-    const server = new NotebookLMMCPServer();
-    await server.start();
+    // Roles (--backend / proxy) arrive in Tasks 4 and 6.
+    await runDirect();
   } catch (error) {
     log.error(`💥 Fatal error starting server: ${error}`);
     if (error instanceof Error) {
