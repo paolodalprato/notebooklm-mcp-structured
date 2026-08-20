@@ -1,6 +1,6 @@
 ## Configuration
 
-> **NotebookLM MCP Structured v1.0.0** - Enhanced MCP server with client-side prompt structuring for source fidelity.
+> **NotebookLM MCP Structured v1.1.0** - Enhanced MCP server with client-side prompt structuring for source fidelity.
 
 **No config files needed!** The server works out of the box with sensible defaults.
 
@@ -97,6 +97,9 @@ For advanced users who want to set global defaults:
 - Multi‑instance profile strategy
   - `NOTEBOOK_PROFILE_STRATEGY` — `auto|single|isolated` (default `auto`)
   - `NOTEBOOK_CLONE_PROFILE` — clone base profile into isolated dir (default `false`)
+- Singleton backend (see [Architecture](../README.md#process-architecture-proxy-backend-direct) in the README)
+  - `NOTEBOOK_SINGLETON` — `true|false` (default `true`) — `false` runs the legacy direct stdio server, skipping the proxy/backend split entirely (used for `npm run dev` under `tsx`, since the proxy can only spawn a compiled `dist/index.js`)
+  - `NOTEBOOK_BACKEND_GRACE_MS` — idle grace period, in ms, before the shared backend exits after its last client disconnects (default `60000`)
 - Cleanup (to prevent disk bloat)
   - `NOTEBOOK_CLEANUP_ON_STARTUP` (default `true`)
   - `NOTEBOOK_CLEANUP_ON_SHUTDOWN` (default `true`)
@@ -113,13 +116,16 @@ For advanced users who want to set global defaults:
 The server uses platform-specific paths via [env-paths](https://github.com/sindresorhus/env-paths)
 - **Linux**: `~/.local/share/notebooklm-mcp/`
 - **macOS**: `~/Library/Application Support/notebooklm-mcp/`
-- **Windows**: `%LOCALAPPDATA%\notebooklm-mcp\`
+- **Windows**: `%LOCALAPPDATA%\notebooklm-mcp\Data\`
 
 **What's stored:**
 - `chrome_profile/` - Persistent Chrome browser profile with login session
 - `browser_state/` - Browser context state and cookies
 - `library.json` - Your notebook library with metadata
 - `chrome_profile_instances/` - Isolated Chrome profiles for concurrent sessions
+- `singleton.json` - Shared backend's port, bearer token, pid, and version (singleton mode only, written once the backend is listening)
+- `singleton.lock` - Spawn lock, held briefly by whichever proxy is starting the backend (singleton mode only)
+- `logs/backend.log` - The backend's log output, truncated at the start of each run (singleton mode only)
 
 **No config.json file** - Configuration is purely via environment variables or tool parameters!
 

@@ -226,6 +226,27 @@ After restarting Claude Desktop:
 
 ## Architecture
 
+### Process Architecture: Proxy, Backend, Direct
+
+Claude Desktop starts one MCP server process per surface (Chat, Cowork). Both used to fight over the same persistent Chrome profile, so whichever surface started second could not query NotebookLM until the first one released it. Since v1.1.0 this is fixed: `dist/index.js` takes one of three roles, decided automatically at startup. **Claude Desktop's configuration does not change** — it still launches the same command.
+
+| Role | When | What it does |
+|------|------|---------------|
+| **Proxy** | Default; what Claude Desktop launches | A thin stdio server: pipes JSON-RPC between Claude Desktop's stdio and the shared backend over localhost Streamable HTTP. Spawns the backend if none is running, and reconnects with a handshake replay if the backend dies mid-session. |
+| **Backend** | Internal `--backend` flag, never set by users | The full server (browser, sessions, tools), bound to `127.0.0.1` on an ephemeral port with bearer-token auth. Exactly one runs per machine, shared by every proxy — one per Claude Desktop surface. |
+| **Direct** | `NOTEBOOK_SINGLETON=false` | The legacy behavior: the full server directly on stdio, no proxy/backend split. Used for development (e.g. `npm run dev` under `tsx`), since the proxy can only spawn a compiled `dist/index.js`, never a `.ts` file. |
+
+**Result**: Chat and Cowork can now query NotebookLM concurrently — one Chrome profile, one browser, shared behind the scenes. This was the bug the singleton backend was built to fix.
+
+**Lifecycle**: the backend exits automatically `NOTEBOOK_BACKEND_GRACE_MS` (default 60000 ms) after its last client disconnects; a cleanly-closed proxy also sends an HTTP `DELETE`, so shutdown is prompt rather than waiting out the grace period. If no client ever connects (e.g. the spawning proxy died first), the backend exits after a 120s startup guard. Client liveness is tracked with a 30s proxy heartbeat against a 90s backend-side session TTL, swept every 15s.
+
+**Runtime files**, in the [data directory](docs/configuration.md#storage-paths):
+- `singleton.json` - the backend's port, bearer token, pid, and version, written atomically once it is listening
+- `singleton.lock` - spawn lock, held briefly by whichever proxy is starting the backend
+- `logs/backend.log` - the backend's log output (color codes stripped), truncated at the start of each run
+
+**Development note**: `npm run dev` (`tsx watch src/index.ts`) cannot be spawned by the proxy, which always launches a compiled `dist/index.js` with `--backend`. Under `tsx`, either set `NOTEBOOK_SINGLETON=false` (direct mode) or hand-start a `--backend` process separately.
+
 ### Request Workflow
 
 This diagram shows the complete flow of a request through the system:

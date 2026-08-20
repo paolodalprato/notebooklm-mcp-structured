@@ -9,17 +9,23 @@ Enhanced MCP server for NotebookLM with client-side prompt structuring for sourc
 - **Framework**: MCP SDK (@modelcontextprotocol/sdk)
 - **Browser automation**: Patchright (Playwright fork with stealth features)
 - **Validation**: Zod
-- **Testing**: None configured (manual testing via `tsx src/index.ts`)
+- **Testing**: `node:test` unit tests for the singleton module (`npm run test:unit`) plus an integration script (`npm run test:singleton`); the rest of the server is manually tested via `tsx src/index.ts`
 
 ## Structure
 
 ```
 src/
-├── index.ts                    # Entry point: NotebookLMMCPServer class, MCP setup
+├── index.ts                    # Entry point: role dispatch (proxy/backend/direct) + CLI commands
+├── server-core.ts              # Shared server core: managers + MCP Server factory, reused by all three roles
 ├── config.ts                   # Configuration: defaults, ENV overrides, paths, timing constants
 ├── errors.ts                   # Custom errors + page closed detection helper
 ├── selectors.ts                # Centralized DOM selectors for NotebookLM UI
 ├── types.ts                    # Global TypeScript interfaces
+├── singleton/
+│   ├── proxy.ts                 # Proxy role: stdio<->HTTP JSON-RPC pipe, handshake replay on reconnect
+│   ├── backend.ts               # Backend role: shared server over localhost Streamable HTTP
+│   ├── spawn.ts                 # Backend discovery, spawn lock, version-skew handling
+│   └── registry.ts              # singleton.json / singleton.lock read-write helpers
 ├── auth/
 │   └── auth-manager.ts         # Google auth: login, cookies, state persistence
 ├── session/
@@ -119,10 +125,12 @@ When reviewing this codebase, pay attention to:
 ## Commands
 
 ```bash
-npm run build    # Compile TypeScript to dist/
-npm run dev      # Watch mode with tsx
-npm run start    # Run compiled server
-npm run test     # Run server directly with tsx (for testing)
+npm run build         # Compile TypeScript to dist/
+npm run dev           # Watch mode with tsx (implies NOTEBOOK_SINGLETON=false: the proxy can't spawn a .ts backend)
+npm run start         # Run compiled server (proxy role by default)
+npm run test          # Run server directly with tsx (for testing)
+npm run test:unit     # node:test unit tests for the singleton module (src/singleton/*.test.ts)
+npm run test:singleton # Integration test: two concurrent proxies, one spawned backend, clean shutdown
 ```
 
 ## Environment Variables
@@ -136,21 +144,26 @@ Key variables (see `config.ts` for full list):
 - `AUTO_LOGIN_ENABLED` - Enable credential-based login
 - `LOGIN_EMAIL`, `LOGIN_PASSWORD` - Auto-login credentials
 - `STEALTH_*` - Human-like behavior settings
+- `NOTEBOOK_SINGLETON` - `true|false` (default `true`) - `false` runs the legacy direct stdio server, skipping the proxy/backend split
+- `NOTEBOOK_BACKEND_GRACE_MS` - Idle grace, in ms, before the shared backend exits after its last client disconnects (default `60000`)
 
 ## Data Paths
 
-Cross-platform via `env-paths`:
+Cross-platform via `env-paths` (`suffix: ""`, so no `-nodejs` suffix is appended):
 
-- **Windows**: `%APPDATA%\notebooklm-mcp\`
+- **Windows**: `%LOCALAPPDATA%\notebooklm-mcp\Data\` (measured 2026-08-20; `env-paths` appends `\Data` to `%LOCALAPPDATA%\notebooklm-mcp` on Windows only)
 - **macOS**: `~/Library/Application Support/notebooklm-mcp/`
-- **Linux**: `~/.local/share/notebooklm-mcp/`
+- **Linux**: `~/.local/share/notebooklm-mcp/` (or `$XDG_DATA_HOME/notebooklm-mcp/` if set)
 
 Contents:
 
 - `browser_state/` - Cookies, localStorage exports
 - `chrome_profile/` - Persistent Chrome profile
 - `library.json` - Notebook collection
+- `singleton.json` - Shared backend's port, bearer token, pid, and version (singleton mode only)
+- `singleton.lock` - Spawn lock held briefly by whichever proxy is starting the backend (singleton mode only)
+- `logs/backend.log` - Backend log output, truncated at the start of each run (singleton mode only)
 
 ---
 
-*Last updated: 2025-01 after code-review refactoring.*
+*Last updated: 2026-08-20 after the singleton backend (Task 10).*

@@ -212,9 +212,13 @@ export class SharedContextManager {
       // server instances, one for chat and one for Cowork, and the second one
       // to start could not open the browser at all.
       //
-      // With strategy "auto" any launch failure now earns one retry on an
-      // isolated profile. The retry is still authenticated, because the
-      // cookies travel through storageState rather than the profile itself.
+      // With strategy "auto" any launch failure earns one retry on an
+      // isolated profile. Note the retry usually CANNOT authenticate:
+      // Google treats a fresh profile as a new device and demands a full
+      // interactive login (measured 2026-08-20). It remains only for
+      // Chrome failing to start for reasons other than profile contention
+      // — and since the singleton backend, contention should no longer
+      // occur at all.
       if (strategy === "single") {
         log.error(
           `❌ Chrome profile unavailable: ${msg}. Close the other instance, ` +

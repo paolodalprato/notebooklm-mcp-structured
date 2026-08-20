@@ -1,6 +1,6 @@
 ## Troubleshooting
 
-> **NotebookLM MCP Structured v1.0.0** - Troubleshooting guide for structured prompts and source fidelity.
+> **NotebookLM MCP Structured v1.1.0** - Troubleshooting guide for structured prompts and source fidelity.
 
 ---
 
@@ -35,6 +35,26 @@
 
 ---
 
+## Singleton Backend Issues
+
+Since v1.1.0, `dist/index.js` launched by Claude Desktop is a lightweight **proxy**; it spawns (or connects to) a single shared **backend** process that actually drives Chrome. This is what lets Chat and Cowork query NotebookLM at the same time — they now share one browser through one backend instead of racing for the same Chrome profile.
+
+### Where the backend logs go
+- The backend writes to `logs/backend.log` in the [data directory](configuration.md#storage-paths) (`%LOCALAPPDATA%\notebooklm-mcp\Data\logs\backend.log` on Windows), truncated at the start of every backend run.
+- The proxy itself logs to stderr, same as before — check Claude Desktop's MCP server logs for proxy-side errors (failed spawn, unreachable backend, etc.).
+
+### Backend seems stuck / not responding
+- **Symptom**: `ask_question` or `get_health` hangs or times out, and it did not before.
+- **Fix**:
+  1. Check `logs/backend.log` for the actual error.
+  2. Close Claude Desktop entirely (all surfaces), so no proxy is holding a connection.
+  3. Delete `singleton.json` from the data directory (the backend's own registration file — this does not touch `browser_state/`, `chrome_profile/`, or `library.json`).
+  4. Restart Claude Desktop. The first surface to start spawns a fresh backend automatically.
+- If the backend process itself is wedged, it will not release its port until killed manually (find it via the `pid` field in `singleton.json`, or the pid logged in `backend.log`) — deleting `singleton.json` alone does not stop it, only stops proxies from trying to reuse it.
+- To bypass the singleton entirely while debugging, set `NOTEBOOK_SINGLETON=false` and restart: this runs the legacy direct stdio server with no proxy/backend split.
+
+---
+
 ## General Issues
 
 ### Fresh start / Deep cleanup
@@ -64,8 +84,9 @@ If you're experiencing persistent issues, corrupted data, or want to start compl
 - Fix: The server auto‑recovers (recreates context and page). Re‑run the tool.
 
 ### Profile lock / `ProcessSingleton` errors
-- Cause: Another Chrome is using the base profile.
-- Fix: `NOTEBOOK_PROFILE_STRATEGY=auto` (default) falls back to isolated per‑instance profiles; or set `isolated`.
+- Since v1.1.0 this should no longer happen in normal use: the singleton backend gives Chat and Cowork exactly one shared Chrome process, so there is nothing left inside this server to contend for the profile.
+- Cause (if it still occurs): some other Chrome — a manually launched one, or a stray process from an old version — is using the base profile.
+- Fix: `NOTEBOOK_PROFILE_STRATEGY=auto` (default) falls back to an isolated per-instance profile; or set `isolated`. Note this fallback usually cannot authenticate on its own — Google treats a fresh profile as a new device and asks for a full interactive login — so treat it as a way to keep the server usable while you resolve the underlying profile conflict, not a silent fix.
 
 ### Authentication issues
 **Quick fix:** Ask the agent to repair authentication; it will run `get_health` → `setup_auth` → `get_health`.
