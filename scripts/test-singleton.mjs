@@ -64,11 +64,12 @@ if (reborn.pid === info.pid) fail("backend pid unchanged after kill?");
 ok(`both surfaces recovered on new backend pid ${reborn.pid}`);
 
 // 4. Close both; the backend must exit within TTL-free time (clean DELETE) + grace.
-// Known issue: on very fast disconnect the proxy child can abort with a native
-// libuv assertion AFTER completing its DELETE + cleanup (deferred to a later
-// task). That does not affect the assertions below, so tolerate close() throwing.
-try { await a.close(); } catch { /* see known-issue note above */ }
-try { await b.close(); } catch { /* see known-issue note above */ }
+// The proxy no longer forces process.exit() until its async cleanup and the
+// event loop settle (see shutdownFromClient in proxy.ts), which resolved a
+// previously-reproducible native libuv abort on very fast disconnects; the
+// try/catch here is kept as a defensive fallback, not because of a known issue.
+try { await a.close(); } catch { /* defensive: see proxy.ts shutdownFromClient */ }
+try { await b.close(); } catch { /* defensive: see proxy.ts shutdownFromClient */ }
 const deadline = Date.now() + GRACE_MS + 15_000;
 let alive = true;
 while (Date.now() < deadline && alive) {

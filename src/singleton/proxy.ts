@@ -201,8 +201,18 @@ export async function runProxy(): Promise<void> {
         await backend?.close();
       } catch {
         // best effort: the backend TTL sweeper covers us
+      } finally {
+        // Do not force `process.exit(0)` here: on a very fast disconnect the
+        // undici/fetch sockets behind StreamableHTTPClientTransport can still
+        // be mid-teardown, and killing the process mid-close is what trips a
+        // native libuv assertion on Windows (src/win/async.c). Nothing else
+        // in this process keeps the event loop alive — the heartbeat interval
+        // is unref()'d and stdin has already ended — so letting it drain
+        // naturally exits cleanly once those handles finish closing on their
+        // own. A short safety-net timer forces the exit if something
+        // unexpected keeps the loop alive.
+        setTimeout(() => process.exit(0), 3_000).unref();
       }
-      process.exit(0);
     })();
   };
   stdio.onclose = shutdownFromClient;
