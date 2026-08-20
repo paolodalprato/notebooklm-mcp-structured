@@ -29,6 +29,7 @@ export async function runProxy(): Promise<void> {
   let initializedNotification: AnyMessage | null = null;
   let pingCounter = 0;
   let closingDown = false;
+  let pumping = false;
 
   const toClient = (m: AnyMessage): void => {
     void stdio.send(m as JSONRPCMessage).catch((e) => log.error(`❌ stdio send failed: ${e}`));
@@ -47,6 +48,31 @@ export async function runProxy(): Promise<void> {
     process.exit(1);
   };
 
+  // Single in-order dispatch path: every client message, queued or fresh,
+  // is sent through here so a mid-drain arrival can never race ahead of
+  // the backlog still waiting to go out (two concurrent transport.send()
+  // calls are not guaranteed to land in issue order).
+  const pump = async (): Promise<void> => {
+    if (pumping) return;
+    pumping = true;
+    try {
+      while (queue.length > 0) {
+        const t = backend;
+        if (!t) return;
+        const m = queue[0];
+        try {
+          await t.send(m as JSONRPCMessage);
+        } catch (e) {
+          log.warning(`⚠️  Forward failed: ${e}`);
+          return;
+        }
+        queue.shift(); // shift only after a successful send, so a failed message stays queued for the next connection
+      }
+    } finally {
+      pumping = false;
+    }
+  };
+
   const connect = async (): Promise<void> => {
     const { url, token } = await ensureBackend();
     const transport = new StreamableHTTPClientTransport(new URL(`${url}/mcp`), {
@@ -62,10 +88,7 @@ export async function runProxy(): Promise<void> {
     };
     await transport.start();
     backend = transport;
-    while (queue.length > 0 && backend === transport) {
-      const m = queue.shift()!;
-      await transport.send(m as JSONRPCMessage);
-    }
+    void pump();
   };
 
   stdio.onmessage = (m) => {
@@ -74,12 +97,8 @@ export async function runProxy(): Promise<void> {
     if (msg.method === "notifications/initialized") initializedNotification = msg;
     void initializedNotification; // recorded for Task 8's replay
     if (msg.id !== undefined && msg.id !== null && msg.method !== undefined) pendingIds.add(msg.id);
-    const t = backend;
-    if (t) {
-      t.send(msg as JSONRPCMessage).catch((e) => log.warning(`⚠️  Forward failed: ${e}`));
-    } else {
-      queue.push(msg);
-    }
+    queue.push(msg);
+    void pump();
   };
   // Idempotent: stdio.onclose and the raw stdin listeners below can all fire
   // for the same disconnect (this SDK version's StdioServerTransport only
