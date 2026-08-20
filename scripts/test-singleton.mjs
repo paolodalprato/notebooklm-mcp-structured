@@ -41,6 +41,28 @@ if (!tb.tools.some((t) => t.name === "ask_question")) fail("surface-b misses ask
 if (JSON.parse(fs.readFileSync(infoPath, "utf-8")).pid !== info.pid) fail("backend changed pid mid-test");
 ok(`both surfaces listed ${ta.tools.length} tools from the same backend`);
 
+// 3b. Kill the backend; both surfaces must recover transparently by
+// reconnecting and replaying the recorded handshake on a fresh session.
+// listTools can race the reconnect and see a synthesized -32603 error
+// (the SDK client surfaces it as a rejected promise) — retry once, the
+// way a real client (Claude) would when told to retry.
+async function listToolsWithRetry(client) {
+  try {
+    return await client.listTools();
+  } catch {
+    await sleep(2000);
+    return client.listTools();
+  }
+}
+
+process.kill(info.pid);
+await sleep(1000);
+const [ra, rb] = await Promise.all([listToolsWithRetry(a), listToolsWithRetry(b)]);
+if (!ra.tools.length || !rb.tools.length) fail("a surface did not recover after backend death");
+const reborn = JSON.parse(fs.readFileSync(infoPath, "utf-8"));
+if (reborn.pid === info.pid) fail("backend pid unchanged after kill?");
+ok(`both surfaces recovered on new backend pid ${reborn.pid}`);
+
 // 4. Close both; the backend must exit within TTL-free time (clean DELETE) + grace.
 // Known issue: on very fast disconnect the proxy child can abort with a native
 // libuv assertion AFTER completing its DELETE + cleanup (deferred to a later
@@ -50,9 +72,9 @@ try { await b.close(); } catch { /* see known-issue note above */ }
 const deadline = Date.now() + GRACE_MS + 15_000;
 let alive = true;
 while (Date.now() < deadline && alive) {
-  try { process.kill(info.pid, 0); await sleep(500); } catch { alive = false; }
+  try { process.kill(reborn.pid, 0); await sleep(500); } catch { alive = false; }
 }
-if (alive) fail(`backend ${info.pid} still alive after grace`);
+if (alive) fail(`backend ${reborn.pid} still alive after grace`);
 if (fs.existsSync(infoPath)) fail("singleton.json not removed on shutdown");
 ok("backend exited after the last client left");
 
