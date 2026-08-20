@@ -11,7 +11,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { CONFIG, SERVER_VERSION } from "../config.js";
 import { createServerCore, createMcpServer, type ServerCore } from "../server-core.js";
 import { log, setGlobalLogger, createLogger } from "../utils/logger.js";
-import { writeInfoAtomic, removeInfo } from "./registry.js";
+import { writeInfoAtomic, removeInfoIfOwn } from "./registry.js";
 
 const CLIENT_TTL_MS = 90_000;   // session dead after this long without a request
 const SWEEP_INTERVAL_MS = 15_000;
@@ -44,6 +44,7 @@ export async function runBackend(): Promise<void> {
   let graceTimer: NodeJS.Timeout | null = null;
   let everHadClient = false;
   let shuttingDown = false;
+  const startedAt = new Date().toISOString(); // must match what writeInfoAtomic below persists
 
   const shutdown = async (reason: string): Promise<void> => {
     if (shuttingDown) return;
@@ -54,7 +55,10 @@ export async function runBackend(): Promise<void> {
     } catch (error) {
       log.warning(`⚠️  Cleanup failed during shutdown: ${error}`);
     }
-    await removeInfo(CONFIG.dataDir);
+    // Only remove the registration if it's still ours — a newer backend
+    // (e.g. one that raced past us during a version-skew replace) may have
+    // already overwritten singleton.json with its own entry.
+    await removeInfoIfOwn(CONFIG.dataDir, { pid: process.pid, startedAt });
     httpServer.close();
     process.exit(0);
   };
@@ -138,7 +142,7 @@ export async function runBackend(): Promise<void> {
     token,
     pid: process.pid,
     version: SERVER_VERSION,
-    startedAt: new Date().toISOString(),
+    startedAt,
   });
   log.success(`✅ Backend listening on 127.0.0.1:${port} (pid ${process.pid})`);
 

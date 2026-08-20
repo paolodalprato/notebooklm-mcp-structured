@@ -66,6 +66,22 @@ export async function removeInfo(dataDir: string): Promise<void> {
   }
 }
 
+/**
+ * Remove singleton.json only if it still matches the copy the caller
+ * validated. Guards against deleting a newer backend's registration
+ * written between the caller's read and this call.
+ */
+export async function removeInfoIfOwn(
+  dataDir: string,
+  expected: Pick<SingletonInfo, "pid" | "startedAt">
+): Promise<boolean> {
+  const current = await readInfo(dataDir);
+  if (!current) return false;
+  if (current.pid !== expected.pid || current.startedAt !== expected.startedAt) return false;
+  await removeInfo(dataDir);
+  return true;
+}
+
 /** True when this process now holds the lock. A lock whose holder is dead is stolen. */
 export async function acquireSpawnLock(dataDir: string): Promise<boolean> {
   const p = lockPath(dataDir);

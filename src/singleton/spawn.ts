@@ -10,7 +10,7 @@ import { log } from "../utils/logger.js";
 import {
   type SingletonInfo,
   readInfo,
-  removeInfo,
+  removeInfoIfOwn,
   isPidAlive,
   acquireSpawnLock,
   releaseSpawnLock,
@@ -62,7 +62,9 @@ async function connectable(): Promise<SingletonInfo | null> {
   const decision = decideOnHealth(health, SERVER_VERSION);
 
   if (decision === "unreachable") {
-    if (!isPidAlive(info.pid)) await removeInfo(CONFIG.dataDir); // stale file of a dead backend
+    // Stale file of a dead backend — but only delete the copy we just
+    // validated; a newer backend may have already overwritten it.
+    if (!isPidAlive(info.pid)) await removeInfoIfOwn(CONFIG.dataDir, info);
     return null;
   }
 
@@ -85,7 +87,9 @@ async function connectable(): Promise<SingletonInfo | null> {
         `close it manually before using version ${SERVER_VERSION}.`
       );
     }
-    await removeInfo(CONFIG.dataDir);
+    // Only remove the registration we validated above — a fresh backend
+    // may have already replaced it (double-spawn/split-brain window).
+    await removeInfoIfOwn(CONFIG.dataDir, info);
     return null;
   }
 

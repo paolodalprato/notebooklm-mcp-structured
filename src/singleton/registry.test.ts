@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { readInfo, writeInfoAtomic, removeInfo, acquireSpawnLock, releaseSpawnLock, isPidAlive, lockPath } from "./registry.js";
+import { readInfo, writeInfoAtomic, removeInfo, removeInfoIfOwn, acquireSpawnLock, releaseSpawnLock, isPidAlive, lockPath } from "./registry.js";
 
 async function tmpDir(): Promise<string> {
   return fs.mkdtemp(path.join(os.tmpdir(), "nlm-registry-"));
@@ -53,4 +53,26 @@ test("lock: stale lock from a dead pid is stolen", async () => {
 test("isPidAlive", () => {
   assert.equal(isPidAlive(process.pid), true);
   assert.equal(isPidAlive(999999999), false);
+});
+
+test("removeInfoIfOwn removes when pid+startedAt match", async () => {
+  const dir = await tmpDir();
+  await writeInfoAtomic(dir, info);
+  assert.equal(await removeInfoIfOwn(dir, { pid: info.pid, startedAt: info.startedAt }), true);
+  assert.equal(await readInfo(dir), null);
+});
+
+test("removeInfoIfOwn leaves the file and returns false when the current file differs", async () => {
+  const dir = await tmpDir();
+  await writeInfoAtomic(dir, info);
+  // A newer backend wrote its own registration between the caller's read and this call.
+  const newer = { ...info, pid: info.pid + 1, startedAt: new Date(Date.now() + 1000).toISOString() };
+  await writeInfoAtomic(dir, newer);
+  assert.equal(await removeInfoIfOwn(dir, { pid: info.pid, startedAt: info.startedAt }), false);
+  assert.deepEqual(await readInfo(dir), newer);
+});
+
+test("removeInfoIfOwn returns false when the file is absent", async () => {
+  const dir = await tmpDir();
+  assert.equal(await removeInfoIfOwn(dir, { pid: info.pid, startedAt: info.startedAt }), false);
 });
