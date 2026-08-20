@@ -74,6 +74,7 @@ If a message arrives from the client before the handshake replay completes, it i
 - When the count reaches zero, a **grace timer** starts (default 60 s, `NOTEBOOK_BACKEND_GRACE_MS`). A new client cancels it.
 - On expiry: close notebook sessions, close Chrome, delete `singleton.json`, exit. Closing Claude Desktop therefore leaves no residual processes.
 - **Startup guard**: if no client connects within 120 s of startup (the spawning proxy died), exit the same way.
+- **Client liveness**: Streamable HTTP sessions are not bound to a TCP connection, so a killed proxy would never register as disconnected on its own. The proxy therefore sends a JSON-RPC `ping` request every 30 s (responses are swallowed proxy-side and never reach the client), and the backend closes any MCP session that has made no HTTP request for 90 s. A cleanly exiting proxy also terminates its session explicitly (HTTP DELETE) so shutdown is prompt rather than TTL-bound.
 - Backend logs (currently colored stderr) go to `dataDir/logs/backend.log`, truncated at startup. The logger gains a file-stream target for backend mode; proxy and direct modes keep stderr.
 
 Existing mechanics are unchanged: per-notebook sessions with the 15-minute inactivity timeout, `releaseContextIfIdle` closing Chrome when no notebook session is active (now purely a resource saving, no longer entangled with cross-surface contention).
