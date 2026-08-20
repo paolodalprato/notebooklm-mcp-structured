@@ -164,8 +164,12 @@ async function main() {
   printBanner();
 
   try {
-    // The proxy role (Task 6) arrives separately.
-    await runDirect();
+    if (!CONFIG.singletonEnabled) {
+      await runDirect();
+      return;
+    }
+    const { runProxy } = await import("./singleton/proxy.js");
+    await runProxy();
   } catch (error) {
     log.error(`💥 Fatal error starting server: ${error}`);
     if (error instanceof Error) {
