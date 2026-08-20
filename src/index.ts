@@ -155,10 +155,16 @@ async function main() {
     process.exit(0);
   }
 
+  if (args.includes("--backend")) {
+    const { runBackend } = await import("./singleton/backend.js");
+    await runBackend();
+    return; // keeps running; exits via its own lifecycle
+  }
+
   printBanner();
 
   try {
-    // Roles (--backend / proxy) arrive in Tasks 4 and 6.
+    // The proxy role (Task 6) arrives separately.
     await runDirect();
   } catch (error) {
     log.error(`💥 Fatal error starting server: ${error}`);
