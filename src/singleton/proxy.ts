@@ -35,6 +35,13 @@ export async function runProxy(): Promise<void> {
   let pumping = false;
   let pumpRequested = false;
   let reconnecting = false;
+  // The id of the request currently mid-`t.send()`, if any (undefined for
+  // non-request messages, which failPending never tracks). Lets pump()
+  // resolve the one interleaving failPending() can't see: send() delivered
+  // the message (no throw) but the backend died before the response came
+  // back, after failPending already decided — correctly, at the time — that
+  // this id was still "unsent" because it was still sitting in `queue`.
+  let inFlightId: string | number | undefined;
 
   const toClient = (m: AnyMessage): void => {
     void stdio.send(m as JSONRPCMessage).catch((e) => log.error(`❌ stdio send failed: ${e}`));
@@ -57,7 +64,13 @@ export async function runProxy(): Promise<void> {
   // (possibly costly, e.g. NotebookLM-quota-consuming) response later.
   const failPending = (): void => {
     const queuedIds = new Set<string | number>();
-    for (const m of queue) if (m.id !== undefined && m.id !== null) queuedIds.add(m.id);
+    // Only requests (m.method !== undefined) can suppress error synthesis
+    // here — a queued client RESPONSE happening to carry the same id as a
+    // pending request must not be mistaken for that request still being in
+    // flight to us.
+    for (const m of queue) {
+      if (m.id !== undefined && m.id !== null && m.method !== undefined) queuedIds.add(m.id);
+    }
     for (const id of pendingIds) {
       if (queuedIds.has(id)) continue; // unsent; keep tracking it in pendingIds until it's actually answered
       toClient({
@@ -75,7 +88,15 @@ export async function runProxy(): Promise<void> {
   const onBackendLost = (why: string): void => {
     if (closingDown || reconnecting) return;
     reconnecting = true;
-    backend = null; // stop routing further sends to the dying/dead transport while we reconnect
+    // Null out first so nothing routes further sends to the dying transport,
+    // then close it so it can't deliver a late duplicate response for a
+    // request we're about to fail/replay on the next transport. Closing
+    // triggers `dying`'s onclose, but that checks `backend === transport`
+    // — backend is already null (never re-equals this now-superseded
+    // transport instance), so it can't re-enter onBackendLost.
+    const dying = backend;
+    backend = null;
+    if (dying) void dying.close().catch(() => {});
     log.warning(`⚠️  Backend connection lost (${why}); reconnecting...`);
     failPending();
     void (async () => {
@@ -127,6 +148,7 @@ export async function runProxy(): Promise<void> {
           const t = backend;
           if (!t) break; // nothing to send on right now; connect() calls pump() again once reconnected
           const m = queue[0];
+          inFlightId = m.id !== undefined && m.id !== null && m.method !== undefined ? m.id : undefined;
           try {
             await t.send(m as JSONRPCMessage);
           } catch (e) {
@@ -135,6 +157,7 @@ export async function runProxy(): Promise<void> {
             // a late failure from an already-superseded transport must not restart
             // a reconnect that may already have finished.
             if (backend === t) onBackendLost("send failed");
+            inFlightId = undefined;
             break;
           }
           queue.shift(); // delivered; drop it before any identity check so it's never resent
@@ -143,7 +166,27 @@ export async function runProxy(): Promise<void> {
           // the send above was in flight. Never keep sending on this now-stale `t`
           // — bail out and let the pumpRequested kick (or connect()'s own
           // `void pump()`) resume the rest of the queue on the current transport.
-          if (backend !== t) break;
+          if (backend !== t) {
+            // The send above succeeded — the message was delivered — but the
+            // backend died before its response could come back on `t`. At the
+            // moment onBackendLost's failPending() ran, this id was still
+            // sitting in `queue` (we hadn't shifted it yet), so failPending
+            // correctly-at-the-time treated it as unsent and left it alone.
+            // It is now neither queued (just shifted) nor going to be
+            // answered (t is superseded/closing) — resolve it here or the
+            // client hangs on it forever.
+            if (inFlightId !== undefined && pendingIds.has(inFlightId)) {
+              toClient({
+                jsonrpc: "2.0",
+                id: inFlightId,
+                error: { code: -32603, message: "NotebookLM backend restarted — please retry the request" },
+              } as AnyMessage);
+              pendingIds.delete(inFlightId);
+            }
+            inFlightId = undefined;
+            break;
+          }
+          inFlightId = undefined;
         }
       } while (pumpRequested);
     } finally {
