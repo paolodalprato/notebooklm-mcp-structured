@@ -19,5 +19,5 @@
     "noUnusedParameters": true
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "Old_Python_Vesion"]
+  "exclude": ["node_modules", "dist", "Old_Python_Vesion", "src/**/*.test.ts"]
 }

@@ -27,6 +27,9 @@ const paths = envPaths("notebooklm-mcp", {suffix: ""});
  */
 export const NOTEBOOK_HOST = "notebook.google.com";
 
+/** Single source of truth for the server version (package.json mirrors it). */
+export const SERVER_VERSION = "1.1.0";
+
 /** True when the URL points to the notebook app, whatever its path or query. */
 export function isNotebookUrl(url: string): boolean {
   try {
@@ -78,6 +81,11 @@ export interface Config {
   browserStateDir: string;
   chromeProfileDir: string;
   chromeInstancesDir: string;
+  logsDir: string;
+
+  // Singleton backend
+  singletonEnabled: boolean;
+  backendGraceMs: number;
 
   // Library Configuration (optional, for default notebook metadata)
   notebookDescription: string;
@@ -145,6 +153,11 @@ const DEFAULTS: Config = {
   browserStateDir: path.join(paths.data, "browser_state"),
   chromeProfileDir: path.join(paths.data, "chrome_profile"),
   chromeInstancesDir: path.join(paths.data, "chrome_profile_instances"),
+  logsDir: path.join(paths.data, "logs"),
+
+  // Singleton backend
+  singletonEnabled: true,
+  backendGraceMs: 60000,
 
   // Library Configuration
   notebookDescription: "General knowledge base",
@@ -247,6 +260,8 @@ function applyEnvOverrides(config: Config): Config {
     responseTimeoutMs: parseInteger(process.env.RESPONSE_TIMEOUT_MS, config.responseTimeoutMs),
     notebookUrlTimeoutMs: parseInteger(process.env.NOTEBOOK_URL_TIMEOUT_MS, config.notebookUrlTimeoutMs),
     chatInputTimeoutMs: parseInteger(process.env.CHAT_INPUT_TIMEOUT_MS, config.chatInputTimeoutMs),
+    singletonEnabled: parseBoolean(process.env.NOTEBOOK_SINGLETON, config.singletonEnabled),
+    backendGraceMs: parseInteger(process.env.NOTEBOOK_BACKEND_GRACE_MS, config.backendGraceMs),
   };
 }
 
@@ -274,6 +289,7 @@ export function ensureDirectories(): void {
     CONFIG.browserStateDir,
     CONFIG.chromeProfileDir,
     CONFIG.chromeInstancesDir,
+    CONFIG.logsDir,
   ];
 
   for (const dir of dirs) {

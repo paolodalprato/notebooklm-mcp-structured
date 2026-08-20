@@ -54,7 +54,7 @@ import { ToolHandlers, buildToolDefinitions } from "./tools/index.js";
 import { ResourceHandlers } from "./resources/resource-handlers.js";
 import { SettingsManager } from "./utils/settings-manager.js";
 import { CliHandler } from "./utils/cli-handler.js";
-import { CONFIG } from "./config.js";
+import { CONFIG, SERVER_VERSION } from "./config.js";
 import { log } from "./utils/logger.js";
 
 /**
@@ -75,7 +75,7 @@ class NotebookLMMCPServer {
     this.server = new Server(
       {
         name: "notebooklm-mcp",
-        version: "1.0.0",
+        version: SERVER_VERSION,
       },
       {
         capabilities: {
@@ -118,7 +118,7 @@ class NotebookLMMCPServer {
 
     const activeSettings = this.settingsManager.getEffectiveSettings();
     log.info("🚀 NotebookLM MCP Server initialized");
-    log.info(`  Version: 1.0.0`);
+    log.info(`  Version: ${SERVER_VERSION}`);
     log.info(`  Node: ${process.version}`);
     log.info(`  Platform: ${process.platform}`);
     log.info(`  Profile: ${activeSettings.profile} (${this.toolDefinitions.length} tools active)`);
