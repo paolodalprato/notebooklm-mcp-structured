@@ -150,6 +150,11 @@ export class SessionManager {
       return session;
     } catch (error) {
       log.error(`❌ Failed to create session: ${error}`);
+      // A session that fails init() never enters the map, so the browser it
+      // opened would stay behind with nothing using it. That matters most for
+      // the throwaway profile: without this the instance keeps reusing a
+      // context that cannot authenticate, even after the main profile is free.
+      await this.releaseContextIfIdle("session failed to initialise");
       throw error;
     }
   }
