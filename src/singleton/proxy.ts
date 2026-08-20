@@ -81,7 +81,13 @@ export async function runProxy(): Promise<void> {
       queue.push(msg);
     }
   };
-  stdio.onclose = () => {
+  // Idempotent: stdio.onclose and the raw stdin listeners below can all fire
+  // for the same disconnect (this SDK version's StdioServerTransport only
+  // reacts to stdin 'data'/'error', not 'end'/'close' — so we hook stdin
+  // directly too, which is what actually fires when the client ends our
+  // stdin first, per the MCP stdio shutdown sequence).
+  const shutdownFromClient = (): void => {
+    if (closingDown) return;
     closingDown = true;
     void (async () => {
       try {
@@ -93,8 +99,11 @@ export async function runProxy(): Promise<void> {
       process.exit(0);
     })();
   };
+  stdio.onclose = shutdownFromClient;
 
   await stdio.start();
+  process.stdin.on("end", shutdownFromClient);
+  process.stdin.on("close", shutdownFromClient);
   try {
     await connect();
   } catch (error) {
